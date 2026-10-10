@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+:root, html, body {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
 #qr-reader-container video {
   width: 100% !important;
   height: 100% !important;
@@ -16,11 +22,15 @@
   display: none !important;
 }
 
-/* Force QR codes to always display pure black on pure white, resisting dark mode or filters */
-svg[xmlns="http://www.w3.org/2000/svg"] {
-  color-scheme: light;
+/* Force QR codes and SVGs to always display pure black on pure white, resisting dark mode or filters */
+svg, canvas {
+  color-scheme: light !important;
   filter: none !important;
   opacity: 1 !important;
 }
 
-
+svg[xmlns="http://www.w3.org/2000/svg"] {
+  color-scheme: light !important;
+  filter: none !important;
+  opacity: 1 !important;
+}

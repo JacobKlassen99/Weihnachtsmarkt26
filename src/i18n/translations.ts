@@ -105,6 +105,8 @@ export const translations = {
     notRegisteredYet: 'Pendiente de registro por el invitado',
     invitationLinkCopied: 'Enlace de invitación copiado al portapapeles',
     maxInvitationsReached: 'Has alcanzado el límite máximo de invitaciones permitidas.',
+    pwaNoteTitle: '¿Ya tienes la aplicación instalada en tu teléfono?',
+    pwaNoteText: 'Si recibiste tu enlace por WhatsApp, abre la aplicación Weihnachtsmarkt en tu teléfono y escribe aquí tu código de activación. Solo necesitas hacerlo una vez. Después podrás entrar a Mi alquiler y mostrar tu código QR cuando quieras.',
 
     // Guest Portal
     guestPortalTitle: 'Registro de Invitado',
@@ -341,6 +343,8 @@ export const translations = {
     notRegisteredYet: 'Noch nicht vom Gast registriert',
     invitationLinkCopied: 'Einladungslink in Zwischenablage kopiert',
     maxInvitationsReached: 'Sie haben das Maximum an Einladungen erreicht.',
+    pwaNoteTitle: 'Haben Sie die App bereits auf Ihrem Telefon installiert?',
+    pwaNoteText: 'Wenn Sie Ihren Link per WhatsApp erhalten haben, öffnen Sie die Weihnachtsmarkt-App auf Ihrem Telefon und geben Sie hier Ihren Aktivierungscode ein. Sie müssen das nur einmal tun. Danach können Sie jederzeit auf „Meine Miete“ zugreifen und Ihren QR-Code vorzeigen.',
 
     // Guest Portal
     guestPortalTitle: 'Gäste-Registrierung',

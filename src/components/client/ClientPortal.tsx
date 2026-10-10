@@ -241,13 +241,11 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
             {t.enterTokenInstructions}
           </p>
 
-          <div className="p-3 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed text-left">
+          <div className="p-3.5 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed text-left">
             <span className="font-bold block mb-1">
-              {lang === 'de' ? 'Hinweis zur PWA-Nutzung:' : 'Nota sobre el uso de la PWA:'}
+              {t.pwaNoteTitle}
             </span>
-            {lang === 'de'
-              ? 'Wenn Sie den WhatsApp-Link im Browser geöffnet haben, wurde der Zugang dort gespeichert. Installierte PWAs haben einen separaten Speicher. Sie können Ihren Aktivierungscode hier direkt eingeben, um ihn in dieser App zu aktivieren.'
-              : 'Si abriste el enlace de WhatsApp en el navegador del celular pero utilizas la PWA instalada, recuerda que tienen almacenamiento separado. Puedes ingresar tu código de activación aquí para activarlo directamente en esta aplicación.'}
+            {t.pwaNoteText}
           </div>
 
           {error && (

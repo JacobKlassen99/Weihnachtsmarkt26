@@ -803,11 +803,82 @@ export const AdminView: React.FC<Props> = ({
   };
 
   const copyClientUrl = (alquiler: Alquiler) => {
+    if (!alquiler.token_cliente || !String(alquiler.token_cliente).trim()) {
+      showFeedback(
+        lang === 'de'
+          ? 'Kein Aktivierungs-Token für diesen Kunden verfügbar. Bitte verwenden Sie Gerät zurücksetzen.'
+          : 'No hay token de activación disponible para este alquiler. Utiliza Restablecer dispositivo.',
+        'error'
+      );
+      return;
+    }
     const origin = window.location.origin;
     const url = `${origin}/#cliente?token=${encodeURIComponent(alquiler.token_cliente)}`;
     navigator.clipboard.writeText(url);
     setCopiedId(alquiler.id);
     setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const handleResetDevice = async (alquiler: Alquiler) => {
+    const token = getActiveToken();
+    if (!token) {
+      handleSessionExpired();
+      return;
+    }
+
+    const alquilerId = alquiler.id || (alquiler as any).AlquilerID;
+    if (!alquilerId) {
+      showFeedback('ID de alquiler no válido', 'error');
+      return;
+    }
+
+    const confirmMsg =
+      lang === 'de'
+        ? 'Möchten Sie den Zugriff dieses Kunden zurücksetzen? Sein vorheriger Zugriff funktioniert nicht mehr und Sie müssen ihm einen neuen Link senden.'
+        : '¿Quieres restablecer el acceso de este cliente? Su acceso anterior dejará de funcionar y tendrás que enviarle un nuevo enlace.';
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setActionInProgress(alquilerId);
+    try {
+      const res = await backendService.resetDispositivo(token, 'CLIENTE', alquilerId);
+      if (!res.ok) {
+        throw new Error(res.error || 'Error al restablecer dispositivo');
+      }
+
+      const newToken =
+        res.data?.TokenActivacion ||
+        res.data?.token_cliente ||
+        res.data?.TokenCliente ||
+        res.TokenActivacion ||
+        res.token_cliente ||
+        '';
+
+      if (adminData && newToken) {
+        const updatedAlquileres = adminData.alquileres.map((a) =>
+          a.id === alquilerId || (a as any).AlquilerID === alquilerId
+            ? { ...a, token_cliente: newToken, TokenCliente: newToken }
+            : a
+        );
+        setAdminData({ ...adminData, alquileres: updatedAlquileres });
+      }
+
+      showFeedback(
+        lang === 'de' ? 'Zugang erfolgreich zurückgesetzt' : 'Acceso restablecido correctamente',
+        'success'
+      );
+
+      await loadAdminData(token, true);
+    } catch (err: any) {
+      const msg = err.message || 'Error al restablecer dispositivo';
+      if (msg.includes('expirada') || msg.includes('Sesion')) {
+        handleSessionExpired(msg);
+        return;
+      }
+      showFeedback(msg, 'error');
+    } finally {
+      setActionInProgress(null);
+    }
   };
 
   const shareRentalViaWhatsApp = async (alquiler: Alquiler) => {
@@ -1415,18 +1486,33 @@ export const AdminView: React.FC<Props> = ({
                             <span>WhatsApp</span>
                           </button>
                           {alq.estado === 'activo' && (
-                            <button
-                              onClick={() => handleCancelRental(alq.id)}
-                              disabled={actionInProgress === alq.id}
-                              className="p-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 transition"
-                              title={t.cancelRental}
-                            >
-                              {actionInProgress === alq.id ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
-                              )}
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleResetDevice(alq)}
+                                disabled={actionInProgress === alq.id}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition text-[11px] font-semibold shadow-xs disabled:opacity-50"
+                                title={lang === 'de' ? 'Gerät zurücksetzen' : 'Restablecer dispositivo'}
+                              >
+                                {actionInProgress === alq.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                )}
+                                <span>{lang === 'de' ? 'Zurücksetzen' : 'Restablecer'}</span>
+                              </button>
+                              <button
+                                onClick={() => handleCancelRental(alq.id)}
+                                disabled={actionInProgress === alq.id}
+                                className="p-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 transition"
+                                title={t.cancelRental}
+                              >
+                                {actionInProgress === alq.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>

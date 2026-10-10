@@ -388,8 +388,8 @@ class BackendService {
   }
 
   // RESET DISPOSITIVO
-  public async resetDispositivo(token: string, personaTipo: 'CLIENTE' | 'INVITADO', personaId: string): Promise<{ ok: boolean; error?: string }> {
-    const res = await this.postRequest<{ ok: boolean; error?: string }>({
+  public async resetDispositivo(token: string, personaTipo: 'CLIENTE' | 'INVITADO', personaId: string): Promise<{ ok: boolean; data?: any; error?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; data?: any; error?: string; [key: string]: any }>({
       action: 'resetDispositivo',
       token,
       PersonaTipo: personaTipo,

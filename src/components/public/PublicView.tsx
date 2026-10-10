@@ -144,7 +144,16 @@ export const PublicView: React.FC<Props> = ({
         .replace('{STAND}', formStandNumero)
         .replace('{CATEGORIA}', formCategory);
 
-      const cleanPhone = String(config.WHATSAPP_ADMIN || '75593587').replace(/\D/g, '');
+      const adminPhone = config?.WHATSAPP_ADMIN;
+      if (!adminPhone || !String(adminPhone).trim()) {
+        throw new Error(
+          lang === 'de'
+            ? 'Die Administrator-WhatsApp-Nummer ist nicht konfiguriert. Bitte überprüfen Sie die Parameter.'
+            : 'El número de WhatsApp del administrador no está configurado. Por favor, verifica los parámetros en Administración.'
+        );
+      }
+
+      const cleanPhone = String(adminPhone).replace(/\D/g, '');
       const defaultWhatsapp = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
         message
       )}`;

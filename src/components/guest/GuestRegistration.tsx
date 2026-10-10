@@ -70,8 +70,40 @@ export const GuestRegistration: React.FC<Props> = ({
       setLoading(true);
       setError(null);
 
+      // SITUACIÓN B: Invitado ya activado (tiene credenciales guardadas en este dispositivo)
+      if (storedInvitadoId && storedSecreto) {
+        setInvitadoId(storedInvitadoId);
+        if (storedNombre) setRegisteredName(storedNombre);
+        try {
+          const qrRes = await backendService.qrDispositivo('INVITADO', storedInvitadoId, storedSecreto);
+          if (qrRes && qrRes.ok) {
+            const qrText = qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
+            if (qrText) {
+              setRegisteredQR(String(qrText));
+              const name = qrRes.data?.NombreCompleto || qrRes.NombreCompleto || qrRes.data?.nombre || qrRes.nombre || storedNombre || 'Invitado';
+              setRegisteredName(name);
+              localStorage.setItem('wm_guest_nombre', name);
+              const stand = qrRes.data?.NumeroStand || qrRes.NumeroStand || qrRes.data?.stand || qrRes.stand;
+              if (stand) {
+                setInvitationInfo({ valida: true, registrado: true, stand: String(stand) });
+              }
+            } else {
+              throw new Error(qrRes.error || (lang === 'de' ? 'QR-Code nicht verfügbar' : 'Código QR no disponible'));
+            }
+          } else {
+            const realError = qrRes?.error || (lang === 'de' ? 'Zugriff abgelaufen oder ungültig' : 'Acceso de invitado no válido o revocado');
+            throw new Error(realError);
+          }
+        } catch (err: any) {
+          setError(err.message || (lang === 'de' ? 'Zugriff abgelaufen oder ungültig' : 'Acceso de invitado no válido o revocado'));
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // SITUACIÓN A: Invitado nuevo (tiene TokenInvitacion sin utilizar)
       if (token) {
-        // Opened via WhatsApp link
         try {
           const info = await backendService.consultarInvitacion(token);
           setInvitationInfo(info);
@@ -79,9 +111,8 @@ export const GuestRegistration: React.FC<Props> = ({
           if (!info.valida) {
             setError(info.error || t.guestInvalidToken);
           } else if (info.registrado) {
-            // Already registered. Check if this device has stored credentials or use info/token
-            const invitadoIdToUse = info.invitado_id || info.InvitadoID || storedInvitadoId || token;
-            const secretoToUse = storedSecreto || getOrCreateSecretoDispositivo(String(invitadoIdToUse));
+            const invitadoIdToUse = info.invitado_id || info.InvitadoID || token;
+            const secretoToUse = getOrCreateSecretoDispositivo(String(invitadoIdToUse));
 
             setInvitadoId(String(invitadoIdToUse));
             localStorage.setItem('wm_guest_invitado_id', String(invitadoIdToUse));
@@ -90,7 +121,6 @@ export const GuestRegistration: React.FC<Props> = ({
             await fetchGuestQr(String(invitadoIdToUse), secretoToUse);
             setRegisteredName(info.nombre_invitado || storedNombre || 'Invitado');
           } else {
-            // Not registered yet: show name input form
             setRegisteredQR(null);
           }
         } catch (err: any) {
@@ -98,23 +128,13 @@ export const GuestRegistration: React.FC<Props> = ({
         } finally {
           setLoading(false);
         }
-      } else if (storedInvitadoId && storedSecreto) {
-        // Reopening PWA without token: recover via stored credentials using qrDispositivo
-        setInvitadoId(storedInvitadoId);
-        if (storedNombre) setRegisteredName(storedNombre);
-        try {
-          await fetchGuestQr(storedInvitadoId, storedSecreto);
-        } catch (err: any) {
-          setError(err.message || (lang === 'de' ? 'Zugriff abgelaufen oder ungültig' : 'Acceso de invitado no válido o revocado'));
-        } finally {
-          setLoading(false);
-        }
       } else {
         setLoading(false);
         setError(
-          lang === 'de'
-            ? 'Bitte öffnen Sie den Einladungslink von WhatsApp, um Ihren Gästepass anzuzeigen.'
-            : 'Por favor, abre el enlace de invitación recibido por WhatsApp para visualizar tu pase de invitado.'
+          t.activateFirst ||
+            (lang === 'de'
+              ? 'Bitte aktivieren Sie Ihre Einladung zuerst über den per WhatsApp erhaltenen Link.'
+              : 'Activa primero tu invitación mediante el enlace recibido por WhatsApp.')
         );
       }
     };
@@ -223,17 +243,27 @@ export const GuestRegistration: React.FC<Props> = ({
               <XCircle className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-2">
-              {lang === 'de' ? 'Ungültige Einladung' : 'Invitación No Válida'}
+              {lang === 'de' ? 'Einladungshinweis' : 'Aviso de Invitación'}
             </h3>
             <p className="text-xs text-gray-600 mb-6 leading-relaxed">
               {error}
             </p>
-            <button
-              onClick={onBackToHome}
-              className="w-full py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold transition"
-            >
-              {t.back}
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={onBackToHome}
+                className="w-full py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold transition"
+              >
+                {t.back}
+              </button>
+              <a
+                href="https://wa.me/75593587?text=Hola,%20tengo%20un%20problema%20con%20mi%20pase%20de%20invitado%20en%20el%20Weihnachtsmarkt."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5"
+              >
+                <span>{t.contactAdmin || 'Contactar al Administrador'}</span>
+              </a>
+            </div>
           </div>
         )}
 

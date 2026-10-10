@@ -188,7 +188,15 @@ export default function App() {
     else if (view === 'client') window.location.hash = clientTokenParam ? `#cliente?token=${clientTokenParam}` : '#cliente';
     else if (view === 'porteria') window.location.hash = '#porteria';
     else if (view === 'admin') window.location.hash = '#admin';
-    else if (view === 'guest') window.location.hash = guestTokenParam ? `#invitacion?token=${guestTokenParam}` : '#invitacion';
+    else if (view === 'guest') {
+      const storedGuestId = localStorage.getItem('wm_guest_invitado_id');
+      if (storedGuestId) {
+        setGuestTokenParam('');
+        window.location.hash = '#invitacion';
+      } else {
+        window.location.hash = guestTokenParam ? `#invitacion?token=${guestTokenParam}` : '#invitacion';
+      }
+    }
   };
 
   const handleLoginSuccess = (token: string, user: Usuario) => {

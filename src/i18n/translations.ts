@@ -132,6 +132,8 @@ export const translations = {
     guestInvalidToken: 'La invitación no es válida, ha sido revocada o el enlace es incorrecto.',
     guestAlreadyRegistered: 'Esta invitación ya fue registrada previamente.',
     myGuestPassTitle: 'Mi pase de invitado',
+    activateFirst: 'Activa primero tu invitación mediante el enlace recibido por WhatsApp.',
+    contactAdmin: 'Contactar al Administrador',
 
     // Gate / Portería
     gateTitle: 'Control de Acceso y Portería',
@@ -383,6 +385,8 @@ export const translations = {
     guestInvalidToken: 'Die Einladung ist ungültig, wurde widerrufen oder der Link ist fehlerhaft.',
     guestAlreadyRegistered: 'Diese Einladung wurde bereits registriert.',
     myGuestPassTitle: 'Mein Gästepass',
+    activateFirst: 'Bitte aktivieren Sie Ihre Einladung zuerst über den per WhatsApp erhaltenen Link.',
+    contactAdmin: 'Administrator kontaktieren',
 
     // Gate / Portería
     gateTitle: 'Einlasskontrolle & Sicherheitsdienst',

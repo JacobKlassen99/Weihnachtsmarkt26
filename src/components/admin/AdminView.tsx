@@ -810,6 +810,22 @@ export const AdminView: React.FC<Props> = ({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
+  const shareRentalViaWhatsApp = (alquiler: Alquiler) => {
+    const origin = window.location.origin;
+    const clientUrl = `${origin}/#cliente?token=${encodeURIComponent(alquiler.token_cliente || '')}`;
+    const phone = String(alquiler.telefono || '').replace(/\D/g, '');
+    const msg =
+      lang === 'de'
+        ? `Hallo ${alquiler.cliente || ''}! Deine Miete für Stand #${alquiler.stand} beim Weihnachtsmarkt wurde bestätigt. Aktiviere hier deinen Zugang: ${clientUrl}`
+        : `¡Hola ${alquiler.cliente || ''}! Tu alquiler del Stand #${alquiler.stand} en el Weihnachtsmarkt ha sido confirmado. Activa tu acceso privado aquí: ${clientUrl}`;
+
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+  };
+
   // If NOT logged in, show Login Form
   if (!sessionToken) {
     return (
@@ -1332,6 +1348,14 @@ export const AdminView: React.FC<Props> = ({
                           >
                             <Copy className="w-3.5 h-3.5" />
                             <span>{copiedId === alq.id ? t.copied : t.clientLink}</span>
+                          </button>
+                          <button
+                            onClick={() => shareRentalViaWhatsApp(alq)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition text-[11px] shadow-xs"
+                            title={lang === 'de' ? 'Zugang per WhatsApp senden' : 'Enviar acceso por WhatsApp'}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>WhatsApp</span>
                           </button>
                           {alq.estado === 'activo' && (
                             <button

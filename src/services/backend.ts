@@ -258,14 +258,56 @@ class BackendService {
     return res.data;
   }
 
+  // 3a. ACTIVAR CLIENTE
+  public async activarCliente(clienteToken: string, secretoDispositivo: string): Promise<{ ok: boolean; qr_acceso?: string; error?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; qr_acceso?: string; error?: string; [key: string]: any }>({
+      action: 'activarCliente',
+      ClienteToken: clienteToken,
+      SecretoDispositivo: secretoDispositivo,
+    });
+    return res;
+  }
+
+  // 3b. QR DISPOSITIVO
+  public async qrDispositivo(
+    personaTipo: 'CLIENTE' | 'INVITADO',
+    personaId: string,
+    secretoDispositivo: string
+  ): Promise<{ ok: boolean; qr_acceso?: string; QR?: string; error?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; qr_acceso?: string; QR?: string; error?: string; [key: string]: any }>({
+      action: 'qrDispositivo',
+      PersonaTipo: personaTipo,
+      PersonaID: personaId,
+      SecretoDispositivo: secretoDispositivo,
+    });
+    return res;
+  }
+
+  // 3c. MI ALQUILER DISPOSITIVO
+  public async getMiAlquilerDispositivo(alquilerId: string, secretoDispositivo: string): Promise<MiAlquilerData> {
+    const res = await this.postRequest<{ ok: boolean; data?: any; error?: string }>({
+      action: 'miAlquilerDispositivo',
+      AlquilerID: String(alquilerId).trim(),
+      SecretoDispositivo: secretoDispositivo,
+    });
+
+    if (!res.ok) {
+      throw new Error(res.error || 'No se pudo recuperar la información del alquiler con este dispositivo');
+    }
+
+    return res.data;
+  }
+
   // 4. CREAR INVITACIÓN (desde área del cliente)
   public async crearInvitacion(
-    tokenCliente: string,
+    alquilerId: string,
+    secretoDispositivo: string,
     nombreSugerido?: string
   ): Promise<{ ok: boolean; token_invitacion?: string; error?: string }> {
     const res = await this.postRequest<{ ok: boolean; token_invitacion?: string; error?: string }>({
       action: 'crearInvitacion',
-      token: tokenCliente,
+      AlquilerID: String(alquilerId).trim(),
+      SecretoDispositivo: secretoDispositivo,
       nombre: nombreSugerido,
     });
 
@@ -296,7 +338,7 @@ class BackendService {
     };
   }
 
-  // 6. INVITADO: Registrar invitado
+  // 6. INVITADO: Registrar invitado / activarInvitado
   public async registrarInvitado(
     tokenInvitacion: string,
     nombreCompleto: string
@@ -311,6 +353,47 @@ class BackendService {
       this.invalidateCache('admin_data');
     }
 
+    return res;
+  }
+
+  public async activarInvitado(
+    tokenInvitacion: string,
+    nombreCompleto: string,
+    secretoDispositivo: string
+  ): Promise<{ ok: boolean; error?: string; qr_acceso?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; error?: string; qr_acceso?: string; [key: string]: any }>({
+      action: 'activarInvitado',
+      TokenInvitacion: tokenInvitacion,
+      NombreCompleto: nombreCompleto,
+      SecretoDispositivo: secretoDispositivo,
+    });
+    if (res.ok) {
+      this.invalidateCache('admin_data');
+    }
+    return res;
+  }
+
+  // ACCESO ALQUILER ADMIN
+  public async accesoAlquilerAdmin(token: string, alquilerId: string): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const res = await this.postRequest<{ ok: boolean; data?: any; error?: string }>({
+      action: 'accesoAlquilerAdmin',
+      token,
+      AlquilerID: String(alquilerId).trim(),
+    });
+    return res;
+  }
+
+  // RESET DISPOSITIVO
+  public async resetDispositivo(token: string, personaTipo: 'CLIENTE' | 'INVITADO', personaId: string): Promise<{ ok: boolean; error?: string }> {
+    const res = await this.postRequest<{ ok: boolean; error?: string }>({
+      action: 'resetDispositivo',
+      token,
+      PersonaTipo: personaTipo,
+      PersonaID: String(personaId).trim(),
+    });
+    if (res.ok) {
+      this.invalidateCache('admin_data');
+    }
     return res;
   }
 
@@ -900,4 +983,21 @@ class BackendService {
   }
 }
 
+export function getOrCreateSecretoDispositivo(identifier: string): string {
+  const storageKey = `wm_secreto_dispositivo_${identifier}`;
+  let secreto = localStorage.getItem(storageKey);
+  if (!secreto) {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    secreto = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem(storageKey, secreto);
+  }
+  return secreto;
+}
+
+export function getOrCreateDeviceId(token: string): string {
+  return getOrCreateSecretoDispositivo(token);
+}
+
 export const backendService = new BackendService();
+

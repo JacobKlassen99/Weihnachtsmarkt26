@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   CheckCircle2,
@@ -14,7 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { translations } from '../../i18n/translations';
-import { backendService } from '../../services/backend';
+import { backendService, getOrCreateSecretoDispositivo } from '../../services/backend';
 import { Idioma, Invitado, MiAlquilerData } from '../../types';
 
 interface Props {
@@ -36,12 +36,72 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchRental = async (token: string) => {
-    if (!token) return;
+  const [personaId, setPersonaId] = useState<string | null>(null);
+
+  const fetchRental = async (tokenOrId: string, shouldActivate: boolean = false) => {
+    if (!tokenOrId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await backendService.getMiAlquiler(token);
+      let alquilerId = localStorage.getItem('wm_client_alquiler_id') || '';
+      if (!alquilerId && !shouldActivate) {
+        alquilerId = tokenOrId;
+      }
+      const secreto = getOrCreateSecretoDispositivo(alquilerId || tokenOrId);
+
+      if (shouldActivate) {
+        try {
+          const actRes = await backendService.activarCliente(tokenOrId, secreto);
+          if (actRes && !actRes.ok) {
+            const errStr = actRes.error || '';
+            if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
+              throw new Error(lang === 'de' 
+                ? 'Dieser Zugang wurde bereits auf einem anderen Gerät aktiviert. Bitte wenden Sie sich an den Administrator zum Zurücksetzen.'
+                : 'Este acceso ya fue activado en otro dispositivo o teléfono. Contacta al administrador para restablecer el acceso si necesitas cambiar de teléfono.');
+            }
+          }
+          if (actRes && actRes.ok) {
+            alquilerId = actRes.AlquilerID || actRes.alquiler_id || actRes.id || actRes.data?.AlquilerID || actRes.data?.id || '';
+          }
+        } catch (actErr: any) {
+          const errStr = actErr.message || '';
+          if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
+            throw actErr;
+          }
+        }
+      }
+
+      let data: MiAlquilerData;
+      if (alquilerId) {
+        try {
+          data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
+        } catch {
+          data = await backendService.getMiAlquiler(tokenOrId);
+        }
+      } else {
+        data = await backendService.getMiAlquiler(tokenOrId);
+        alquilerId = data.alquiler?.AlquilerID || data.alquiler?.id || tokenOrId;
+      }
+
+      const currentPersonaId = alquilerId || data.alquiler?.AlquilerID || data.alquiler?.id || tokenOrId;
+      setPersonaId(String(currentPersonaId));
+      setActiveToken(tokenOrId);
+
+      // Save locally for subsequent opens: only AlquilerID
+      localStorage.setItem('wm_client_alquiler_id', String(currentPersonaId));
+
+      const finalSecreto = getOrCreateSecretoDispositivo(String(currentPersonaId));
+
+      try {
+        const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), finalSecreto);
+        if (qrRes && qrRes.ok) {
+          data.qr_acceso = qrRes.qr_acceso || qrRes.QR || undefined;
+        } else {
+          data.qr_acceso = undefined;
+        }
+      } catch {
+        data.qr_acceso = undefined;
+      }
       setRentalData(data);
     } catch (err: any) {
       setError(err.message || 'No se pudo cargar la información del stand');
@@ -52,31 +112,72 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
   };
 
   useEffect(() => {
+    const storedAlquilerId = localStorage.getItem('wm_client_alquiler_id');
+
     if (initialToken) {
       setTokenInput(initialToken);
       setActiveToken(initialToken);
-      fetchRental(initialToken);
+      fetchRental(initialToken, true); // First time activation with token
+    } else if (storedAlquilerId) {
+      setActiveToken(storedAlquilerId);
+      fetchRental(storedAlquilerId, false); // Subsequent open: direct fetch via miAlquilerDispositivo, NO activation
     }
   }, [initialToken]);
+
+  // QR automatic renewal every 25 seconds using refs to prevent interval reset
+  const rentalDataRef = useRef(rentalData);
+  rentalDataRef.current = rentalData;
+  const activeTokenRef = useRef(activeToken);
+  activeTokenRef.current = activeToken;
+  const personaIdRef = useRef(personaId);
+  personaIdRef.current = personaId;
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const token = activeTokenRef.current;
+      const data = rentalDataRef.current;
+      const pId = personaIdRef.current;
+      if (!data || !token) return;
+
+      const currentPersonaId = pId || data.alquiler?.id || data.alquiler?.AlquilerID || token;
+      const secreto = getOrCreateSecretoDispositivo(String(currentPersonaId));
+
+      try {
+        const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto);
+        if (qrRes && qrRes.ok) {
+          const newQr = qrRes.qr_acceso || qrRes.QR;
+          if (newQr) {
+            setRentalData(prev => prev ? { ...prev, qr_acceso: newQr } : null);
+          }
+        }
+      } catch {
+        // ignore network hiccups
+      }
+    }, 25000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleManualLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tokenInput.trim()) return;
     setActiveToken(tokenInput.trim());
-    fetchRental(tokenInput.trim());
+    fetchRental(tokenInput.trim(), true);
   };
 
   const handleCreateInvitation = async () => {
-    if (!activeToken) return;
+    const alquilerId = personaId || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID || activeToken;
+    if (!alquilerId) return;
     setCreatingInvite(true);
     setInviteError(null);
     try {
-      const res = await backendService.crearInvitacion(activeToken);
+      const secreto = getOrCreateSecretoDispositivo(String(alquilerId));
+      const res = await backendService.crearInvitacion(String(alquilerId), secreto);
       if (!res.ok) {
         throw new Error(res.error || 'No se pudo generar la invitación');
       }
-      // Re-fetch rental data to see updated invitation list
-      await fetchRental(activeToken);
+      // Re-fetch rental data using miAlquilerDispositivo
+      await fetchRental(String(alquilerId), false);
     } catch (err: any) {
       setInviteError(err.message || 'Error al crear invitación');
     } finally {
@@ -243,14 +344,37 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
               </p>
 
               {/* QR Code */}
-              <div className="p-3 bg-white rounded-xl shadow-xs border border-gray-200 inline-block mb-3">
-                <QRCodeSVG
-                  value={rentalData.qr_acceso || rentalData.alquiler?.qr_cliente || activeToken}
-                  size={150}
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
+              {rentalData.qr_acceso ? (
+                <div className="p-3 bg-white rounded-xl shadow-xs border border-gray-200 inline-block mb-3">
+                  <QRCodeSVG
+                    value={rentalData.qr_acceso}
+                    size={150}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+              ) : (
+                <div className="p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 inline-block mb-3 text-center w-40 h-40 flex flex-col items-center justify-center">
+                  <QrCode className="w-8 h-8 text-gray-400 mb-1" />
+                  <span className="text-[11px] font-medium text-gray-500 mb-2">
+                    {lang === 'de' ? 'QR nicht verfügbar' : 'QR no disponible'}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const currentPersonaId = personaId || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID || activeToken;
+                      const secreto = getOrCreateSecretoDispositivo(activeToken || currentPersonaId);
+                      backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto).then(res => {
+                        if (res && res.ok && res.qr_acceso) {
+                          setRentalData(prev => prev ? { ...prev, qr_acceso: res.qr_acceso! } : null);
+                        }
+                      });
+                    }}
+                    className="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 text-[10px] font-semibold transition"
+                  >
+                    {lang === 'de' ? 'Wiederholen' : 'Reintentar'}
+                  </button>
+                </div>
+              )}
 
               <span className="text-xs font-mono text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
                 Pase Titular • Stand #{rentalData.alquiler?.stand}

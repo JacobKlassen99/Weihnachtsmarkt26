@@ -9,7 +9,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { translations } from '../../i18n/translations';
-import { backendService } from '../../services/backend';
+import { backendService, getOrCreateSecretoDispositivo } from '../../services/backend';
 import { Idioma, InvitacionInfo } from '../../types';
 
 interface Props {
@@ -32,6 +32,7 @@ export const GuestRegistration: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
   const [registeredQR, setRegisteredQR] = useState<string | null>(null);
   const [registeredName, setRegisteredName] = useState<string | null>(null);
+  const [invitadoId, setInvitadoId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchInfo = async () => {
@@ -44,14 +45,21 @@ export const GuestRegistration: React.FC<Props> = ({
       setLoading(true);
       setError(null);
       try {
+        const secreto = getOrCreateSecretoDispositivo(token);
         const info = await backendService.consultarInvitacion(token);
         setInvitationInfo(info);
+        const currentInvitadoId = info.invitado_id || info.InvitadoID || token;
+        setInvitadoId(String(currentInvitadoId));
 
         if (!info.valida) {
           setError(info.error || t.guestInvalidToken);
         } else if (info.registrado) {
-          // If already registered, show the QR
-          setRegisteredQR(info.qr_acceso || token);
+          try {
+            const qrRes = await backendService.qrDispositivo('INVITADO', String(currentInvitadoId), secreto);
+            setRegisteredQR(qrRes.qr_acceso || info.qr_acceso || token);
+          } catch {
+            setRegisteredQR(info.qr_acceso || token);
+          }
           setRegisteredName(info.nombre_invitado || 'Invitado');
         }
       } catch (err: any) {
@@ -64,6 +72,26 @@ export const GuestRegistration: React.FC<Props> = ({
     fetchInfo();
   }, [token, lang]);
 
+  // QR automatic renewal every 25 seconds for guest
+  useEffect(() => {
+    if (!registeredQR || !token) return;
+    const currentInvitadoId = invitadoId || invitationInfo?.invitado_id || invitationInfo?.InvitadoID || token;
+    const secreto = getOrCreateSecretoDispositivo(token);
+
+    const interval = setInterval(async () => {
+      try {
+        const qrRes = await backendService.qrDispositivo('INVITADO', String(currentInvitadoId), secreto);
+        if (qrRes && qrRes.ok && qrRes.qr_acceso) {
+          setRegisteredQR(qrRes.qr_acceso);
+        }
+      } catch {
+        // ignore network hiccups
+      }
+    }, 25000);
+
+    return () => clearInterval(interval);
+  }, [registeredQR, token, invitadoId, invitationInfo]);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName.trim()) return;
@@ -72,11 +100,18 @@ export const GuestRegistration: React.FC<Props> = ({
     setError(null);
 
     try {
-      const res = await backendService.registrarInvitado(token, guestName.trim());
+      const secreto = getOrCreateSecretoDispositivo(token);
+      const res = await backendService.activarInvitado(token, guestName.trim(), secreto);
       if (!res.ok) {
-        throw new Error(res.error || 'No se pudo completar el registro');
+        const errStr = res.error || '';
+        if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
+          throw new Error('Esta invitación ya fue activada en otro dispositivo o teléfono.');
+        }
+        throw new Error(errStr || 'No se pudo completar el registro');
       }
 
+      const newInvitadoId = res.invitado_id || res.InvitadoID || token;
+      setInvitadoId(String(newInvitadoId));
       setRegisteredQR(res.qr_acceso || token);
       setRegisteredName(guestName.trim());
     } catch (err: any) {

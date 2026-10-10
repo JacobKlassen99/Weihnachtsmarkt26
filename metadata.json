@@ -1,0 +1,6 @@
+{
+  "name": "Weihnachtsmarkt PWA",
+  "description": "Aplicación PWA para la gestión del evento Weihnachtsmarkt: plano de stands, alquileres, invitaciones, portería y panel administrativo.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

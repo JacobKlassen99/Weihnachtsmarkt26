@@ -1,0 +1,27 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Proxy /api/backend specifically to Netlify Function
+[[redirects]]
+  from = "/api/backend"
+  to = "/.netlify/functions/backend"
+  status = 200
+  force = true
+
+# Proxy any other /api/* to Netlify Functions
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+  force = true
+
+# Client-side routing SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

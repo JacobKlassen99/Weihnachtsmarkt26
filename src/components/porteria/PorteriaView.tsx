@@ -210,7 +210,12 @@ export const PorteriaView: React.FC<Props> = ({
   };
 
   useEffect(() => {
+    const handleStopCameraEvent = () => {
+      stopScanner();
+    };
+    window.addEventListener('weihnachtsmarkt-stop-camera', handleStopCameraEvent);
     return () => {
+      window.removeEventListener('weihnachtsmarkt-stop-camera', handleStopCameraEvent);
       if (qrReaderRef.current) {
         try {
           if (qrReaderRef.current.isScanning) {

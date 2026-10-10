@@ -423,23 +423,147 @@ class BackendService {
             Descripcion: s.Descripcion || s.descripcion || '',
           }))
         : [],
-      solicitudes: Array.isArray(res.data?.solicitudes) ? res.data.solicitudes : [],
-      alquileres: Array.isArray(res.data?.alquileres) ? res.data.alquileres : [],
-      invitados: Array.isArray(res.data?.invitados) ? res.data.invitados : [],
-      accesos: Array.isArray(res.data?.accesos) ? res.data.accesos : [],
+      solicitudes: Array.isArray(res.data?.solicitudes)
+        ? res.data.solicitudes.map((s: any) => {
+            const idVal = s.SolicitudID || s.solicitudID || s.id || s.ID || '';
+            const standVal = s.NumeroStand || s.numeroStand || s.stand || s.Stand || '';
+            const nomVal = s.NombreCompleto || s.nombreCompleto || s.nombre || s.Nombre || '';
+            const telVal = s.Telefono || s.telefono || s.phone || '';
+            const fechaVal = s.FechaSolicitud || s.fechaSolicitud || s.fecha || s.Fecha || '';
+            const estadoVal = String(s.Estado || s.estado || 'pendiente').toLowerCase();
+            const catVal = s.Categoria || s.categoria || 'Comida';
+            return {
+              ...s,
+              id: idVal,
+              SolicitudID: idVal,
+              stand: standVal,
+              NumeroStand: standVal,
+              nombre: nomVal,
+              NombreCompleto: nomVal,
+              telefono: telVal,
+              Telefono: telVal,
+              fecha: fechaVal,
+              FechaSolicitud: fechaVal,
+              estado: estadoVal,
+              Estado: String(s.Estado || s.estado || 'PENDIENTE').toUpperCase(),
+              categoria: catVal,
+              Categoria: catVal,
+            };
+          })
+        : [],
+      alquileres: Array.isArray(res.data?.alquileres)
+        ? res.data.alquileres.map((a: any) => {
+            const idVal = a.AlquilerID || a.alquilerID || a.id || a.ID || '';
+            const standVal = a.NumeroStand || a.numeroStand || a.stand || a.Stand || '';
+            const clienteVal = a.Cliente || a.cliente || a.NombreCompleto || a.nombreCompleto || '';
+            const telVal = a.Telefono || a.telefono || '';
+            const tokenVal = a.TokenCliente || a.tokenCliente || a.token_cliente || '';
+            const fechaVal = a.FechaAlquiler || a.fechaAlquiler || a.fecha_alquiler || a.fecha || '';
+            const estadoVal = String(a.Estado || a.estado || 'activo').toLowerCase();
+            return {
+              ...a,
+              id: idVal,
+              AlquilerID: idVal,
+              stand: standVal,
+              NumeroStand: standVal,
+              cliente: clienteVal,
+              Cliente: clienteVal,
+              telefono: telVal,
+              Telefono: telVal,
+              token_cliente: tokenVal,
+              TokenCliente: tokenVal,
+              fecha_alquiler: fechaVal,
+              FechaAlquiler: fechaVal,
+              estado: estadoVal,
+              Estado: String(a.Estado || a.estado || 'ACTIVO').toUpperCase(),
+            };
+          })
+        : [],
+      invitados: Array.isArray(res.data?.invitados)
+        ? res.data.invitados.map((i: any) => {
+            const idVal = i.InvitadoID || i.invitadoID || i.id || i.ID || '';
+            const standVal = i.NumeroStand || i.numeroStand || i.stand || i.Stand || '';
+            const nomVal = i.NombreInvitado || i.nombreInvitado || i.nombre_invitado || i.nombre || '';
+            const tokenVal = i.TokenInvitacion || i.tokenInvitacion || i.token_invitacion || '';
+            const estadoVal = String(i.Estado || i.estado || 'disponible').toLowerCase();
+            const fechaReg = i.FechaRegistro || i.fechaRegistro || i.fecha_registro || '';
+            const fechaCre = i.FechaCreacion || i.fechaCreacion || i.fecha_creacion || '';
+            return {
+              ...i,
+              id: idVal,
+              InvitadoID: idVal,
+              stand: standVal,
+              NumeroStand: standVal,
+              nombre_invitado: nomVal,
+              NombreInvitado: nomVal,
+              token_invitacion: tokenVal,
+              TokenInvitacion: tokenVal,
+              estado: estadoVal,
+              Estado: String(i.Estado || i.estado || 'DISPONIBLE').toUpperCase(),
+              fecha_registro: fechaReg,
+              FechaRegistro: fechaReg,
+              fecha_creacion: fechaCre,
+              FechaCreacion: fechaCre,
+            };
+          })
+        : [],
+      accesos: Array.isArray(res.data?.accesos)
+        ? res.data.accesos.map((ac: any) => {
+            const idVal = ac.AccesoID || ac.accesoID || ac.id || ac.ID || '';
+            const fechaVal = ac.FechaHora || ac.fechaHora || ac.fecha_hora || ac.fecha || '';
+            const nomVal = ac.Nombre || ac.nombre || '';
+            const tipoVal = String(ac.Tipo || ac.tipo || 'cliente').toLowerCase();
+            const standVal = ac.NumeroStand || ac.numeroStand || ac.stand || ac.Stand || '';
+            const porteroVal = ac.Portero || ac.portero || '';
+            return {
+              ...ac,
+              id: idVal,
+              AccesoID: idVal,
+              fecha_hora: fechaVal,
+              FechaHora: fechaVal,
+              nombre: nomVal,
+              Nombre: nomVal,
+              tipo: tipoVal,
+              Tipo: tipoVal,
+              stand: standVal,
+              NumeroStand: standVal,
+              portero: porteroVal,
+              Portero: porteroVal,
+            };
+          })
+        : [],
+      gestiones: Array.isArray(res.data?.gestiones)
+        ? res.data.gestiones.map((g: any) => {
+            const idVal = g.GestionID || g.gestionID || g.id || g.ID || '';
+            const nomVal = g.Nombre || g.nombre || '';
+            const anioVal = Number(g.Anio || g.anio || 2026);
+            const activaVal = Boolean(g.Activa !== undefined ? g.Activa : (g.activa !== undefined ? g.activa : false));
+            return {
+              ...g,
+              id: idVal,
+              GestionID: idVal,
+              nombre: nomVal,
+              Nombre: nomVal,
+              anio: anioVal,
+              Anio: anioVal,
+              activa: activaVal,
+              Activa: activaVal,
+            };
+          })
+        : [],
       usuarios: Array.isArray(
         res.data?.usuarios ||
         res.data?.users ||
         res.data?.listaUsuarios ||
         res.data?.lista_usuarios ||
-        res.usuarios
+        (res as any).usuarios
       )
         ? (
             res.data?.usuarios ||
             res.data?.users ||
             res.data?.listaUsuarios ||
             res.data?.lista_usuarios ||
-            res.usuarios
+            (res as any).usuarios
           ).map((u: any) => {
             const rawActivo = String(u.Activo || u.activo || u.estado || u.status || 'SI').trim().toUpperCase();
             const isActivo = rawActivo === 'SI' || rawActivo === 'ACTIVO' || rawActivo === 'TRUE' || rawActivo === '1' || rawActivo === 'YES';
@@ -464,7 +588,6 @@ class BackendService {
             };
           })
         : [],
-      gestiones: Array.isArray(res.data?.gestiones) ? res.data.gestiones : [],
     };
 
     this.setCache(cacheKey, adminData);

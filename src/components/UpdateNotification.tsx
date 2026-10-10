@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { translations } from '../i18n/translations';
 
 interface Props {
@@ -8,58 +9,52 @@ interface Props {
 }
 
 export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = false }) => {
-  const [needRefresh, setNeedRefresh] = useState(false);
-  const [updateSW, setUpdateSW] = useState<(() => Promise<void>) | null>(null);
-  const [dismissed, setDismissed] = useState(false);
   const t = translations[lang];
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    // In development mode, do not register service worker update listeners
-    if (import.meta.env.DEV) {
-      return;
-    }
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegisteredSW(swUrl, r) {
+      if (r) {
+        // Check for updates periodically every hour
+        setInterval(() => {
+          r.update().catch(() => {});
+        }, 60 * 60 * 1000);
 
-    // Check if navigator.serviceWorker is supported
-    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // NEVER automatically reload. Just show notification banner.
-                setNeedRefresh(true);
-                setUpdateSW(() => async () => {
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  window.location.reload();
-                });
-              }
-            });
+        // Check when tab becomes visible/active
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            r.update().catch(() => {});
           }
         });
-      }).catch(() => {});
-    }
-  }, []);
+      }
+    },
+    onRegisterError(error) {
+      console.error('SW registration error:', error);
+    },
+  });
 
   if (!needRefresh || dismissed) {
     return null;
   }
 
-  // Do not show intrusive blocking modal if user is editing forms; show bottom corner toast
   const handleUpdate = () => {
     if (hasUnsavedForms) {
       const confirmUpdate = window.confirm(
         lang === 'de'
-          ? 'Sie haben ungespeicherte Eingaben. Möchten Sie die Seite wirklich aktualisieren?'
-          : 'Tienes información sin guardar en el formulario. ¿Deseas actualizar ahora de todos modos?'
+          ? 'Sie haben ungespeicherte Änderungen in Formularen. Wenn Sie jetzt aktualisieren, könnten diese Daten verloren gehen. Möchten Sie fortfahren?'
+          : 'Tienes cambios sin guardar en formularios. Si actualizas ahora, podrías perder esos datos. ¿Deseas continuar de todos modos?'
       );
       if (!confirmUpdate) return;
     }
-    if (updateSW) {
-      updateSW();
-    } else {
-      window.location.reload();
-    }
+
+    // Stop active camera in Portería if scanning
+    window.dispatchEvent(new CustomEvent('weihnachtsmarkt-stop-camera'));
+
+    // Apply update and reload
+    updateServiceWorker(true);
   };
 
   return (
@@ -78,14 +73,14 @@ export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = fa
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={handleUpdate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs transition shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs transition shadow-xs cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               {t.updateNow}
             </button>
             <button
               onClick={() => setDismissed(true)}
-              className="px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs transition"
+              className="px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs transition cursor-pointer"
             >
               {t.close}
             </button>
@@ -93,7 +88,7 @@ export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = fa
         </div>
         <button
           onClick={() => setDismissed(true)}
-          className="text-gray-400 hover:text-gray-700 p-1"
+          className="text-gray-400 hover:text-gray-700 p-1 cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>

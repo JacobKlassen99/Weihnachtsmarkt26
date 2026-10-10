@@ -9,7 +9,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { translations } from '../../i18n/translations';
-import { backendService, getOrCreateSecretoDispositivo } from '../../services/backend';
+import { backendService } from '../../services/backend';
 import { Idioma, InvitacionInfo } from '../../types';
 
 interface Props {
@@ -72,10 +72,30 @@ export const GuestRegistration: React.FC<Props> = ({
 
       // SITUACIÓN B: Invitado ya activado (tiene credenciales guardadas en este dispositivo)
       if (storedInvitadoId && storedSecreto) {
-        setInvitadoId(storedInvitadoId);
+        let activeId = storedInvitadoId;
+        setInvitadoId(activeId);
         if (storedNombre) setRegisteredName(storedNombre);
         try {
-          const qrRes = await backendService.qrDispositivo('INVITADO', storedInvitadoId, storedSecreto);
+          let qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
+
+          // Auto-recovery if storedInvitadoId was saved as a token instead of InvitadoID
+          if (!qrRes || !qrRes.ok) {
+            try {
+              const infoLookup = await backendService.consultarInvitacion(storedInvitadoId);
+              if (infoLookup.valida && (infoLookup.invitado_id || infoLookup.InvitadoID || infoLookup.id)) {
+                const realId = infoLookup.invitado_id || infoLookup.InvitadoID || infoLookup.id;
+                if (realId && realId !== storedInvitadoId) {
+                  activeId = String(realId);
+                  localStorage.setItem('wm_guest_invitado_id', activeId);
+                  setInvitadoId(activeId);
+                  qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
+                }
+              }
+            } catch {
+              // ignore lookup error
+            }
+          }
+
           if (qrRes && qrRes.ok) {
             const qrText = qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
             if (qrText) {
@@ -111,15 +131,11 @@ export const GuestRegistration: React.FC<Props> = ({
           if (!info.valida) {
             setError(info.error || t.guestInvalidToken);
           } else if (info.registrado) {
-            const invitadoIdToUse = info.invitado_id || info.InvitadoID || token;
-            const secretoToUse = getOrCreateSecretoDispositivo(String(invitadoIdToUse));
-
-            setInvitadoId(String(invitadoIdToUse));
-            localStorage.setItem('wm_guest_invitado_id', String(invitadoIdToUse));
-            localStorage.setItem('wm_guest_secreto', secretoToUse);
-
-            await fetchGuestQr(String(invitadoIdToUse), secretoToUse);
-            setRegisteredName(info.nombre_invitado || storedNombre || 'Invitado');
+            setError(
+              lang === 'de'
+                ? 'Diese Einladung wurde bereits auf einem anderen Gerät aktiviert.'
+                : 'Esta invitación ya fue activada en otro dispositivo o teléfono.'
+            );
           } else {
             setRegisteredQR(null);
           }
@@ -210,14 +226,26 @@ export const GuestRegistration: React.FC<Props> = ({
         throw new Error(errStr || (lang === 'de' ? 'Registrierung fehlgeschlagen' : 'No se pudo completar el registro'));
       }
 
-      const newInvitadoId = res.invitado_id || res.InvitadoID || res.id || token;
-      setInvitadoId(String(newInvitadoId));
-      localStorage.setItem('wm_guest_invitado_id', String(newInvitadoId));
+      let resolvedInvitadoId = res.invitado_id || res.InvitadoID || res.id || res.Invitado_ID || res.data?.invitado_id || res.data?.InvitadoID || res.data?.id;
+      if (!resolvedInvitadoId || String(resolvedInvitadoId).includes('inv_') || String(resolvedInvitadoId) === token) {
+        try {
+          const infoAfter = await backendService.consultarInvitacion(token);
+          if (infoAfter.valida && (infoAfter.invitado_id || infoAfter.InvitadoID || infoAfter.id)) {
+            resolvedInvitadoId = infoAfter.invitado_id || infoAfter.InvitadoID || infoAfter.id;
+          }
+        } catch {
+          // fallback
+        }
+      }
+      resolvedInvitadoId = resolvedInvitadoId || token;
+
+      setInvitadoId(String(resolvedInvitadoId));
+      localStorage.setItem('wm_guest_invitado_id', String(resolvedInvitadoId));
       localStorage.setItem('wm_guest_secreto', secreto);
       localStorage.setItem('wm_guest_nombre', guestName.trim());
       setRegisteredName(guestName.trim());
 
-      await fetchGuestQr(String(newInvitadoId), secreto);
+      await fetchGuestQr(String(resolvedInvitadoId), secreto);
     } catch (err: any) {
       setError(err.message || (lang === 'de' ? 'Fehler bei der Registrierung' : 'Error al registrar invitado'));
     } finally {

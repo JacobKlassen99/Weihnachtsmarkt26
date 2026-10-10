@@ -803,6 +803,37 @@ class BackendService {
     return res;
   }
 
+  // ACCESO ALQUILER ADMIN
+  public async accesoAlquilerAdmin(
+    token: string,
+    alquilerId: string
+  ): Promise<{ ok: boolean; data?: any; error?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; data?: any; error?: string; [key: string]: any }>({
+      action: 'accesoAlquilerAdmin',
+      token,
+      AlquilerID: String(alquilerId).trim(),
+    });
+    return res;
+  }
+
+  // RESET DISPOSITIVO
+  public async resetDispositivo(
+    token: string,
+    personaTipo: string,
+    personaId: string
+  ): Promise<{ ok: boolean; error?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; error?: string; [key: string]: any }>({
+      action: 'resetDispositivo',
+      token,
+      PersonaTipo: String(personaTipo).trim(),
+      PersonaID: String(personaId).trim(),
+    });
+    if (res.ok) {
+      this.invalidateCache('admin_data');
+    }
+    return res;
+  }
+
   // 14. CREAR USUARIO (crearUsuario_(p): Usuario, Password >= 12, Rol "ADMIN"|"PORTERO", Nombre)
   public async crearUsuario(
     token: string,

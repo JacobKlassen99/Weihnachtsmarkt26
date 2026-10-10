@@ -810,19 +810,74 @@ export const AdminView: React.FC<Props> = ({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  const shareRentalViaWhatsApp = (alquiler: Alquiler) => {
-    const origin = window.location.origin;
-    const clientUrl = `${origin}/#cliente?token=${encodeURIComponent(alquiler.token_cliente || '')}`;
-    const phone = String(alquiler.telefono || '').replace(/\D/g, '');
-    const msg =
-      lang === 'de'
-        ? `Hallo ${alquiler.cliente || ''}! Deine Miete für Stand #${alquiler.stand} beim Weihnachtsmarkt wurde bestätigt. Aktiviere hier deinen Zugang: ${clientUrl}`
-        : `¡Hola ${alquiler.cliente || ''}! Tu alquiler del Stand #${alquiler.stand} en el Weihnachtsmarkt ha sido confirmado. Activa tu acceso privado aquí: ${clientUrl}`;
+  const shareRentalViaWhatsApp = async (alquiler: Alquiler) => {
+    const token = getActiveToken();
+    if (!token) {
+      handleSessionExpired();
+      return;
+    }
 
-    if (phone) {
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
-    } else {
-      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    const alquilerId = alquiler.id || (alquiler as any).AlquilerID;
+    if (!alquilerId) {
+      showFeedback('ID de alquiler no válido', 'error');
+      return;
+    }
+
+    setActionInProgress(alquilerId);
+    try {
+      const res = await backendService.accesoAlquilerAdmin(token, alquilerId);
+      if (!res.ok) {
+        throw new Error(res.error || 'Error al consultar acceso del alquiler');
+      }
+
+      const data = res.data || res;
+      const activado = Boolean(data.activado);
+      const clienteToken = data.ClienteToken || data.token_cliente || '';
+      const clienteNombre = data.cliente || alquiler.cliente || '';
+      const standNum = data.NumeroStand || data.stand || alquiler.stand || '';
+      const phoneRaw = data.Telefono || alquiler.telefono || '';
+      const phone = String(phoneRaw).replace(/\D/g, '');
+
+      if (activado) {
+        const msgActivado =
+          lang === 'de'
+            ? 'Dieser Kunde hat seinen Zugang bereits aktiviert. Wenn er das Telefon gewechselt hat, verwenden Sie Gerät zurücksetzen.'
+            : 'Este cliente ya activó su acceso. Si cambió de teléfono, utiliza Restablecer dispositivo.';
+        showFeedback(msgActivado, 'error');
+        return;
+      }
+
+      if (!clienteToken || typeof clienteToken !== 'string' || !clienteToken.trim()) {
+        const msgError =
+          lang === 'de'
+            ? 'Fehler: Kunden-Token ist leer oder nicht verfügbar.'
+            : 'Error: El token de cliente está vacío o no está disponible.';
+        showFeedback(msgError, 'error');
+        return;
+      }
+
+      const origin = window.location.origin;
+      const clientUrl = `${origin}/#cliente?token=${encodeURIComponent(clienteToken.trim())}`;
+      const msg =
+        lang === 'de'
+          ? `Hallo ${clienteNombre}! Deine Miete für Stand #${standNum} beim Weihnachtsmarkt wurde bestätigt. Aktiviere hier deinen Zugang: ${clientUrl}`
+          : `¡Hola ${clienteNombre}! Tu alquiler del Stand #${standNum} en el Weihnachtsmarkt ha sido confirmado. Activa tu acceso privado aquí: ${clientUrl}`;
+
+      if (phone) {
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      } else {
+        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+      }
+      showFeedback(lang === 'de' ? 'WhatsApp-Link erfolgreich vorbereitet' : 'Enlace de WhatsApp preparado con éxito', 'success');
+    } catch (err: any) {
+      const msg = err.message || 'Error al consultar acceso por WhatsApp';
+      if (msg.includes('expirada') || msg.includes('Sesion')) {
+        handleSessionExpired(msg);
+        return;
+      }
+      showFeedback(msg, 'error');
+    } finally {
+      setActionInProgress(null);
     }
   };
 

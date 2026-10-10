@@ -47,23 +47,27 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
       let secreto = localStorage.getItem('wm_client_secreto') || '';
 
       if (shouldActivate) {
-        secreto = getOrCreateSecretoDispositivo(tokenOrId);
-        try {
-          const actRes = await backendService.activarCliente(tokenOrId, secreto);
-          if (actRes && !actRes.ok) {
-            const errStr = actRes.error || '';
-            if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
-              throw new Error(lang === 'de' 
-                ? 'Dieser Zugang wurde bereits auf einem anderen Gerät aktiviert. Bitte wenden Sie sich an den Administrator zum Zurücksetzen.'
-                : 'Este acceso ya fue activado en otro dispositivo o teléfono. Contacta al administrador para restablecer el acceso si necesitas cambiar de teléfono.');
-            }
-            throw new Error(errStr || 'Error al activar el cliente');
+        // Clear previous stored device access so a fresh activation happens with the new token
+        localStorage.removeItem('wm_client_alquiler_id');
+        localStorage.removeItem('wm_client_secreto');
+        alquilerId = '';
+
+        const array = new Uint8Array(32);
+        crypto.getRandomValues(array);
+        secreto = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+
+        const actRes = await backendService.activarCliente(tokenOrId, secreto);
+        if (actRes && !actRes.ok) {
+          const errStr = actRes.error || '';
+          if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
+            throw new Error(lang === 'de' 
+              ? 'Dieser Zugang wurde bereits auf einem anderen Gerät aktiviert. Bitte wenden Sie sich an den Administrator zum Zurücksetzen.'
+              : 'Este acceso ya fue activado en otro dispositivo o teléfono. Contacta al administrador para restablecer el acceso si necesitas cambiar de teléfono.');
           }
-          if (actRes && actRes.ok) {
-            alquilerId = actRes.AlquilerID || actRes.alquiler_id || actRes.id || actRes.data?.AlquilerID || actRes.data?.id || '';
-          }
-        } catch (actErr: any) {
-          throw actErr;
+          throw new Error(errStr || (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido'));
+        }
+        if (actRes && actRes.ok) {
+          alquilerId = actRes.AlquilerID || actRes.alquiler_id || actRes.id || actRes.data?.AlquilerID || actRes.data?.id || '';
         }
       }
 
@@ -79,8 +83,6 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
         data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
       } else if (shouldActivate) {
         const targetId = alquilerId || tokenOrId;
-        const permanentSecreto = getOrCreateSecretoDispositivo(targetId);
-        secreto = permanentSecreto;
         alquilerId = targetId;
         data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
       } else {
@@ -109,7 +111,7 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
       }
       setRentalData(data);
     } catch (err: any) {
-      setError(err.message || 'No se pudo cargar la información del stand');
+      setError(err.message || (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido'));
       setRentalData(null);
     } finally {
       setLoading(false);
@@ -123,7 +125,7 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
     if (initialToken) {
       setTokenInput(initialToken);
       setActiveToken(initialToken);
-      fetchRental(initialToken, true); // First time activation with token
+      // Do NOT consume or auto-activate upon opening the link; wait for user confirmation.
     } else if (storedAlquilerId && storedSecreto) {
       setActiveToken(storedAlquilerId);
       fetchRental(storedAlquilerId, false); // Subsequent open: direct fetch via miAlquilerDispositivo, NO activation

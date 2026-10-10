@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   CheckCircle2,
@@ -34,88 +34,172 @@ export const GuestRegistration: React.FC<Props> = ({
   const [registeredName, setRegisteredName] = useState<string | null>(null);
   const [invitadoId, setInvitadoId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchInfo = async () => {
-      if (!token) {
-        setLoading(false);
-        setError(t.guestInvalidToken);
-        return;
+  const fetchGuestQr = async (id: string, sec: string) => {
+    if (!id || !sec) return;
+    try {
+      const qrRes = await backendService.qrDispositivo('INVITADO', id, sec);
+      if (qrRes && qrRes.ok) {
+        const qrText = qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
+        if (qrText) {
+          setRegisteredQR(String(qrText));
+          if (qrRes.NombreCompleto || qrRes.nombre) {
+            setRegisteredName(qrRes.NombreCompleto || qrRes.nombre);
+          }
+          if (qrRes.NumeroStand || qrRes.stand) {
+            setInvitationInfo((prev) =>
+              prev
+                ? { ...prev, stand: qrRes.NumeroStand || qrRes.stand }
+                : { valida: true, registrado: true, stand: qrRes.NumeroStand || qrRes.stand }
+            );
+          }
+        }
+      } else {
+        setError(qrRes?.error || (lang === 'de' ? 'Zugriff abgelaufen oder ungültig' : 'Acceso de invitado no válido o revocado'));
       }
+    } catch {
+      // ignore temporary network hiccups on auto-renewal
+    }
+  };
+
+  useEffect(() => {
+    const initGuest = async () => {
+      const storedInvitadoId = localStorage.getItem('wm_guest_invitado_id');
+      const storedSecreto = localStorage.getItem('wm_guest_secreto');
+      const storedNombre = localStorage.getItem('wm_guest_nombre');
 
       setLoading(true);
       setError(null);
-      try {
-        const secreto = getOrCreateSecretoDispositivo(token);
-        const info = await backendService.consultarInvitacion(token);
-        setInvitationInfo(info);
-        const currentInvitadoId = info.invitado_id || info.InvitadoID || token;
-        setInvitadoId(String(currentInvitadoId));
 
-        if (!info.valida) {
-          setError(info.error || t.guestInvalidToken);
-        } else if (info.registrado) {
-          try {
-            const qrRes = await backendService.qrDispositivo('INVITADO', String(currentInvitadoId), secreto);
-            setRegisteredQR(qrRes.qr_acceso || info.qr_acceso || token);
-          } catch {
-            setRegisteredQR(info.qr_acceso || token);
+      if (token) {
+        // Opened via WhatsApp link
+        try {
+          const info = await backendService.consultarInvitacion(token);
+          setInvitationInfo(info);
+
+          if (!info.valida) {
+            setError(info.error || t.guestInvalidToken);
+          } else if (info.registrado) {
+            // Already registered. Check if this device has stored credentials or use info/token
+            const invitadoIdToUse = info.invitado_id || info.InvitadoID || storedInvitadoId || token;
+            const secretoToUse = storedSecreto || getOrCreateSecretoDispositivo(String(invitadoIdToUse));
+
+            setInvitadoId(String(invitadoIdToUse));
+            localStorage.setItem('wm_guest_invitado_id', String(invitadoIdToUse));
+            localStorage.setItem('wm_guest_secreto', secretoToUse);
+
+            await fetchGuestQr(String(invitadoIdToUse), secretoToUse);
+            setRegisteredName(info.nombre_invitado || storedNombre || 'Invitado');
+          } else {
+            // Not registered yet: show name input form
+            setRegisteredQR(null);
           }
-          setRegisteredName(info.nombre_invitado || 'Invitado');
+        } catch (err: any) {
+          setError(err.message || t.guestInvalidToken);
+        } finally {
+          setLoading(false);
         }
-      } catch (err: any) {
-        setError(err.message || t.guestInvalidToken);
-      } finally {
+      } else if (storedInvitadoId && storedSecreto) {
+        // Reopening PWA without token: recover via stored credentials using qrDispositivo
+        setInvitadoId(storedInvitadoId);
+        if (storedNombre) setRegisteredName(storedNombre);
+        try {
+          await fetchGuestQr(storedInvitadoId, storedSecreto);
+        } catch (err: any) {
+          setError(err.message || (lang === 'de' ? 'Zugriff abgelaufen oder ungültig' : 'Acceso de invitado no válido o revocado'));
+        } finally {
+          setLoading(false);
+        }
+      } else {
         setLoading(false);
+        setError(
+          lang === 'de'
+            ? 'Bitte öffnen Sie den Einladungslink von WhatsApp, um Ihren Gästepass anzuzeigen.'
+            : 'Por favor, abre el enlace de invitación recibido por WhatsApp para visualizar tu pase de invitado.'
+        );
       }
     };
 
-    fetchInfo();
+    initGuest();
   }, [token, lang]);
 
-  // QR automatic renewal every 25 seconds for guest
-  useEffect(() => {
-    if (!registeredQR || !token) return;
-    const currentInvitadoId = invitadoId || invitationInfo?.invitado_id || invitationInfo?.InvitadoID || token;
-    const secreto = getOrCreateSecretoDispositivo(token);
+  // QR automatic renewal every 25 seconds and on visibility/focus changes
+  const invitadoIdRef = useRef(invitadoId);
+  invitadoIdRef.current = invitadoId;
 
-    const interval = setInterval(async () => {
-      try {
-        const qrRes = await backendService.qrDispositivo('INVITADO', String(currentInvitadoId), secreto);
-        if (qrRes && qrRes.ok && qrRes.qr_acceso) {
-          setRegisteredQR(qrRes.qr_acceso);
-        }
-      } catch {
-        // ignore network hiccups
+  useEffect(() => {
+    if (!registeredQR) return;
+
+    const interval = setInterval(() => {
+      const id = invitadoIdRef.current || localStorage.getItem('wm_guest_invitado_id');
+      const sec = localStorage.getItem('wm_guest_secreto');
+      if (id && sec) {
+        fetchGuestQr(id, sec);
       }
     }, 25000);
 
-    return () => clearInterval(interval);
-  }, [registeredQR, token, invitadoId, invitationInfo]);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const id = invitadoIdRef.current || localStorage.getItem('wm_guest_invitado_id');
+        const sec = localStorage.getItem('wm_guest_secreto');
+        if (id && sec) {
+          fetchGuestQr(id, sec);
+        }
+      }
+    };
+
+    const handleFocus = () => {
+      const id = invitadoIdRef.current || localStorage.getItem('wm_guest_invitado_id');
+      const sec = localStorage.getItem('wm_guest_secreto');
+      if (id && sec) {
+        fetchGuestQr(id, sec);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [registeredQR]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guestName.trim()) return;
+    if (!guestName.trim() || !token) return;
 
     setSubmitting(true);
     setError(null);
 
     try {
-      const secreto = getOrCreateSecretoDispositivo(token);
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      const secreto = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+
       const res = await backendService.activarInvitado(token, guestName.trim(), secreto);
       if (!res.ok) {
         const errStr = res.error || '';
         if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
-          throw new Error('Esta invitación ya fue activada en otro dispositivo o teléfono.');
+          throw new Error(
+            lang === 'de'
+              ? 'Diese Einladung wurde bereits auf einem anderen Gerät aktiviert.'
+              : 'Esta invitación ya fue activada en otro dispositivo o teléfono.'
+          );
         }
-        throw new Error(errStr || 'No se pudo completar el registro');
+        throw new Error(errStr || (lang === 'de' ? 'Registrierung fehlgeschlagen' : 'No se pudo completar el registro'));
       }
 
-      const newInvitadoId = res.invitado_id || res.InvitadoID || token;
+      const newInvitadoId = res.invitado_id || res.InvitadoID || res.id || token;
       setInvitadoId(String(newInvitadoId));
-      setRegisteredQR(res.qr_acceso || token);
+      localStorage.setItem('wm_guest_invitado_id', String(newInvitadoId));
+      localStorage.setItem('wm_guest_secreto', secreto);
+      localStorage.setItem('wm_guest_nombre', guestName.trim());
       setRegisteredName(guestName.trim());
+
+      await fetchGuestQr(String(newInvitadoId), secreto);
     } catch (err: any) {
-      setError(err.message || 'Error al registrar invitado');
+      setError(err.message || (lang === 'de' ? 'Fehler bei der Registrierung' : 'Error al registrar invitado'));
     } finally {
       setSubmitting(false);
     }
@@ -153,14 +237,14 @@ export const GuestRegistration: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Already or newly Registered State with QR */}
+        {/* Registered State with QR (Mi pase de invitado) */}
         {!loading && registeredQR && (
           <div className="text-center py-2">
             <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 text-green-700 flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <span className="text-xs font-bold uppercase tracking-wider text-red-700">
-              {t.guestQRTitle}
+              {t.myGuestPassTitle || 'Mi pase de invitado'}
             </span>
             <h3 className="text-xl font-bold text-gray-900 mt-0.5 mb-1">
               {t.guestSuccessTitle}
@@ -171,10 +255,10 @@ export const GuestRegistration: React.FC<Props> = ({
 
             {/* QR Code */}
             <div className="p-4 bg-white rounded-2xl shadow-xs border border-gray-200 inline-block mb-4">
-              <QRCodeSVG value={registeredQR} size={180} level="H" includeMargin={false} />
+              <QRCodeSVG value={registeredQR} size={220} level="H" includeMargin={false} />
             </div>
 
-            <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 mb-6 text-xs text-gray-700 space-y-1 text-left">
+            <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 mb-6 text-xs text-gray-700 space-y-1.5 text-left">
               <div className="flex justify-between">
                 <span className="text-gray-500">{t.guestName}:</span>
                 <span className="font-bold text-gray-900">{registeredName}</span>

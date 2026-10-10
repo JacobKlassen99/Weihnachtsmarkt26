@@ -6,6 +6,7 @@ import {
   LogOut,
   QrCode,
   Store,
+  UserCheck,
 } from 'lucide-react';
 import { translations } from '../i18n/translations';
 import { Idioma } from '../types';
@@ -21,6 +22,7 @@ interface Props {
   gestionActiva?: string;
   adminLoggedIn?: boolean;
   onAdminLogout?: () => void;
+  hasGuestPass?: boolean;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -31,6 +33,7 @@ export const Navbar: React.FC<Props> = ({
   gestionActiva = 'GES-2026',
   adminLoggedIn = false,
   onAdminLogout,
+  hasGuestPass = false,
 }) => {
   const t = translations[lang];
 
@@ -82,6 +85,20 @@ export const Navbar: React.FC<Props> = ({
               <KeyRound className="w-3.5 h-3.5" />
               {t.navClient}
             </button>
+
+            {(hasGuestPass || currentView === 'guest') && (
+              <button
+                onClick={() => onNavigate('guest')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  currentView === 'guest'
+                    ? 'bg-red-700 text-white shadow-xs'
+                    : 'text-gray-700 hover:text-red-700 hover:bg-white'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                {t.navGuest}
+              </button>
+            )}
 
             <button
               onClick={() => onNavigate('porteria')}
@@ -179,6 +196,20 @@ export const Navbar: React.FC<Props> = ({
           <KeyRound className="w-5 h-5 mb-0.5" />
           <span className="text-[11px]">{t.navClient}</span>
         </button>
+
+        {(hasGuestPass || currentView === 'guest') && (
+          <button
+            onClick={() => onNavigate('guest')}
+            className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
+              currentView === 'guest'
+                ? 'text-red-700 font-bold'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <UserCheck className="w-5 h-5 mb-0.5" />
+            <span className="text-[11px]">{t.navGuest}</span>
+          </button>
+        )}
 
         <button
           onClick={() => onNavigate('porteria')}

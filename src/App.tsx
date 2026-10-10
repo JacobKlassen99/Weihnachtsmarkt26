@@ -246,6 +246,7 @@ export default function App() {
         gestionActiva={publicData.configuracion?.GESTION_ACTIVA || 'GES-2026'}
         adminLoggedIn={Boolean(sessionToken)}
         onAdminLogout={handleLogout}
+        hasGuestPass={Boolean(localStorage.getItem('wm_guest_invitado_id'))}
       />
 
       {/* Main View Container */}

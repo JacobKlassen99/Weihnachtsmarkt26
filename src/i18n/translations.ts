@@ -40,6 +40,7 @@ export const translations = {
     navHome: 'Inicio',
     navStands: 'Stands',
     navClient: 'Mi Alquiler',
+    navGuest: 'Mi Pase',
     navGate: 'Portería',
     navAdmin: 'Administración',
     navSettings: 'Configuración',
@@ -130,6 +131,7 @@ export const translations = {
     guestQRTitle: 'Pase de Entrada Oficial',
     guestInvalidToken: 'La invitación no es válida, ha sido revocada o el enlace es incorrecto.',
     guestAlreadyRegistered: 'Esta invitación ya fue registrada previamente.',
+    myGuestPassTitle: 'Mi pase de invitado',
 
     // Gate / Portería
     gateTitle: 'Control de Acceso y Portería',
@@ -289,6 +291,7 @@ export const translations = {
     navHome: 'Startseite',
     navStands: 'Stände',
     navClient: 'Meine Miete',
+    navGuest: 'Mein Pass',
     navGate: 'Einlasskontrolle',
     navAdmin: 'Verwaltung',
     navSettings: 'Einstellungen',
@@ -379,6 +382,7 @@ export const translations = {
     guestQRTitle: 'Offizieller Einlasspass',
     guestInvalidToken: 'Die Einladung ist ungültig, wurde widerrufen oder der Link ist fehlerhaft.',
     guestAlreadyRegistered: 'Diese Einladung wurde bereits registriert.',
+    myGuestPassTitle: 'Mein Gästepass',
 
     // Gate / Portería
     gateTitle: 'Einlasskontrolle & Sicherheitsdienst',

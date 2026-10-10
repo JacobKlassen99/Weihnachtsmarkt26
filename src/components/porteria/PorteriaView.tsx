@@ -161,23 +161,29 @@ export const PorteriaView: React.FC<Props> = ({
         // Permission might be requested during start()
       }
 
-      // 2. Filter out front-facing cameras
-      const backDevices = devices.filter(d => 
-        !/front|user|selfie|delanteria|delantera/i.test(d.label)
-      );
+      // 2. Filter out front-facing cameras completely
+      const backDevices = devices.filter(d => {
+        const label = (d.label || '').toLowerCase();
+        return !label.includes('front') && 
+               !label.includes('user') && 
+               !label.includes('selfie') && 
+               !label.includes('delanteria') && 
+               !label.includes('delantera');
+      });
 
-      // 3. Select best back camera: prefer Back Facing 0 or label with "0" or "back"
+      // 3. Prioritize "Back Facing 0" or camera 0 or back/rear
       let targetCameraId: string | null = null;
-      const back0 = backDevices.find(d =>
-        /back.*0|rear.*0|traseira.*0|trasera.*0/i.test(d.label) ||
-        (d.label.toLowerCase().includes('back') && d.label.includes('0')) ||
-        d.id === '0'
-      );
+      const back0 = backDevices.find(d => {
+        const label = (d.label || '').toLowerCase();
+        return label.includes('back facing 0') || label.includes('back 0') || label.includes('back-0') || d.id === '0';
+      });
 
       if (back0) {
         targetCameraId = back0.id;
       } else if (backDevices.length > 0) {
         targetCameraId = backDevices[0].id;
+      } else if (devices.length > 0) {
+        targetCameraId = devices[0].id;
       }
 
       let started = false;

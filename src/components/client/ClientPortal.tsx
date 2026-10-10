@@ -230,24 +230,19 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
         </p>
       </div>
 
-      {/* Token Input Bar if no active rental yet */}
+      {/* Token Input Bar or Activation Options if no active rental yet */}
       {!rentalData && (
-        <div className="max-w-md mx-auto p-6 sm:p-8 rounded-2xl bg-white border border-gray-200 shadow-sm text-center">
-          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center mx-auto mb-4 border border-red-100">
-            <KeyRound className="w-6 h-6" />
-          </div>
-          <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">
-            {t.accessPortal}
-          </h3>
-          <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-            {t.enterTokenInstructions}
-          </p>
-
-          <div className="p-3.5 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed text-left">
-            <span className="font-bold block mb-1">
-              {t.pwaNoteTitle}
-            </span>
-            {t.pwaNoteText}
+        <div className="max-w-md mx-auto p-6 sm:p-8 rounded-2xl bg-white border border-gray-200 shadow-sm">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center mx-auto mb-4 border border-red-100">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">
+              {initialToken ? t.activationScreenTitle : t.accessPortal}
+            </h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              {initialToken ? t.activationScreenSubtitle : t.enterTokenInstructions}
+            </p>
           </div>
 
           {error && (
@@ -256,30 +251,93 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
             </div>
           )}
 
-          <form onSubmit={handleManualLogin} className="space-y-4">
-            <input
-              type="text"
-              required
-              placeholder={t.tokenPlaceholder}
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 font-mono"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>{t.loading}</span>
-                </>
-              ) : (
-                <span>{lang === 'de' ? 'Aktivierungscode eingeben' : 'Ingresar código de activación'}</span>
-              )}
-            </button>
-          </form>
+          {initialToken ? (
+            <div className="space-y-4">
+              {/* Option 1: Use in installed app */}
+              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3 text-left">
+                <div>
+                  <h4 className="text-xs font-bold text-gray-900 mb-1">{t.optionInstalledAppTitle}</h4>
+                  <p className="text-[11px] text-gray-600 leading-relaxed">{t.optionInstalledAppDesc}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={initialToken}
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-[11px] text-gray-800 font-mono select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(initialToken, 'init_tok')}
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg bg-white hover:bg-gray-100 text-gray-700 text-xs border border-gray-300 transition shrink-0 font-medium"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedId === 'init_tok' ? t.codeCopied : t.copyActivationCode}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Activate here */}
+              <div className="p-4 rounded-xl bg-red-50/50 border border-red-200 space-y-3 text-left">
+                <div>
+                  <h4 className="text-xs font-bold text-gray-900 mb-1">{t.optionBrowserTitle}</h4>
+                  <p className="text-[11px] text-gray-600 leading-relaxed">{t.optionBrowserDesc}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveToken(initialToken);
+                    fetchRental(initialToken, true);
+                  }}
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>{t.loading}</span>
+                    </>
+                  ) : (
+                    <span>{t.activateHereButton}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 text-center">
+              <div className="p-3.5 mb-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed text-left">
+                <span className="font-bold block mb-1">
+                  {t.pwaNoteTitle}
+                </span>
+                {t.pwaNoteText}
+              </div>
+
+              <form onSubmit={handleManualLogin} className="space-y-4">
+                <input
+                  type="text"
+                  required
+                  placeholder={t.tokenPlaceholder}
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>{t.loading}</span>
+                    </>
+                  ) : (
+                    <span>{lang === 'de' ? 'Aktivierungscode eingeben' : 'Ingresar código de activación'}</span>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       )}
 

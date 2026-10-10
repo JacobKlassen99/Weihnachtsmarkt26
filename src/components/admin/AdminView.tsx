@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Share2,
   ShieldAlert,
   ShieldCheck,
   Sliders,
@@ -802,8 +803,27 @@ export const AdminView: React.FC<Props> = ({
     }
   };
 
-  const copyClientUrl = (alquiler: Alquiler) => {
-    if (!alquiler.token_cliente || !String(alquiler.token_cliente).trim()) {
+  const getValidClientToken = async (alquiler: Alquiler): Promise<string> => {
+    let clientToken = alquiler.token_cliente || (alquiler as any).TokenCliente || '';
+    if (!clientToken || !String(clientToken).trim()) {
+      const token = getActiveToken();
+      const alquilerId = alquiler.id || (alquiler as any).AlquilerID;
+      if (token && alquilerId) {
+        try {
+          const res = await backendService.accesoAlquilerAdmin(token, alquilerId);
+          if (res.ok) {
+            const data = res.data || res;
+            clientToken = data.ClienteToken || data.token_cliente || data.TokenActivacion || '';
+          }
+        } catch {}
+      }
+    }
+    return String(clientToken || '').trim();
+  };
+
+  const copyClientUrl = async (alquiler: Alquiler) => {
+    const clientToken = await getValidClientToken(alquiler);
+    if (!clientToken) {
       showFeedback(
         lang === 'de'
           ? 'Kein Aktivierungs-Token für diesen Kunden verfügbar. Bitte verwenden Sie Gerät zurücksetzen.'
@@ -813,10 +833,51 @@ export const AdminView: React.FC<Props> = ({
       return;
     }
     const origin = window.location.origin;
-    const url = `${origin}/#cliente?token=${encodeURIComponent(alquiler.token_cliente)}`;
+    const url = `${origin}/#cliente?token=${encodeURIComponent(clientToken)}`;
     navigator.clipboard.writeText(url);
     setCopiedId(alquiler.id);
     setTimeout(() => setCopiedId(null), 2500);
+    showFeedback(
+      lang === 'de' ? 'Link in Zwischenablage kopiert' : 'Enlace copiado al portapapeles',
+      'success'
+    );
+  };
+
+  const shareClientUrl = async (alquiler: Alquiler) => {
+    const clientToken = await getValidClientToken(alquiler);
+    if (!clientToken) {
+      showFeedback(
+        lang === 'de'
+          ? 'Kein Aktivierungs-Token für diesen Kunden verfügbar. Bitte verwenden Sie Gerät zurücksetzen.'
+          : 'No hay token de activación disponible para este alquiler. Utiliza Restablecer dispositivo.',
+        'error'
+      );
+      return;
+    }
+    const origin = window.location.origin;
+    const url = `${origin}/#cliente?token=${encodeURIComponent(clientToken)}`;
+    const title = lang === 'de' ? 'Weihnachtsmarkt - Zugang' : 'Weihnachtsmarkt - Acceso';
+    const text =
+      lang === 'de'
+        ? `Dein Zugang für Stand #${alquiler.stand} beim Weihnachtsmarkt:`
+        : `Tu acceso para el Stand #${alquiler.stand} en el Weihnachtsmarkt:`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    navigator.clipboard.writeText(url);
+    setCopiedId(alquiler.id);
+    setTimeout(() => setCopiedId(null), 2500);
+    showFeedback(
+      lang === 'de' ? 'Link in Zwischenablage kopiert' : 'Enlace copiado al portapapeles',
+      'success'
+    );
   };
 
   const handleResetDevice = async (alquiler: Alquiler) => {
@@ -1476,6 +1537,14 @@ export const AdminView: React.FC<Props> = ({
                           >
                             <Copy className="w-3.5 h-3.5" />
                             <span>{copiedId === alq.id ? t.copied : t.clientLink}</span>
+                          </button>
+                          <button
+                            onClick={() => shareClientUrl(alq)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 transition text-[11px] shadow-xs"
+                            title={lang === 'de' ? 'Link teilen' : 'Compartir enlace'}
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                            <span>{lang === 'de' ? 'Teilen' : 'Compartir'}</span>
                           </button>
                           <button
                             onClick={() => shareRentalViaWhatsApp(alq)}

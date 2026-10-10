@@ -107,6 +107,15 @@ export const translations = {
     maxInvitationsReached: 'Has alcanzado el límite máximo de invitaciones permitidas.',
     pwaNoteTitle: '¿Ya tienes la aplicación instalada en tu teléfono?',
     pwaNoteText: 'Si recibiste tu enlace por WhatsApp, abre la aplicación Weihnachtsmarkt en tu teléfono y escribe aquí tu código de activación. Solo necesitas hacerlo una vez. Después podrás entrar a Mi alquiler y mostrar tu código QR cuando quieras.',
+    activationScreenTitle: 'Activación de Acceso',
+    activationScreenSubtitle: 'Has abierto un enlace de activación para tu stand en Weihnachtsmarkt. Selecciona cómo deseas utilizarlo:',
+    optionInstalledAppTitle: '1. Usar en la aplicación instalada',
+    optionInstalledAppDesc: 'Si ya tienes la aplicación Weihnachtsmarkt instalada en tu teléfono, copia este código y pégalo en la sección Mi alquiler de tu app.',
+    copyActivationCode: 'Copiar código de activación',
+    codeCopied: '¡Código copiado!',
+    optionBrowserTitle: '2. Activar aquí',
+    optionBrowserDesc: 'Si prefieres usar la aplicación directamente en este navegador web, pulsa el botón para confirmar.',
+    activateHereButton: 'Activar acceso en este navegador',
 
     // Guest Portal
     guestPortalTitle: 'Registro de Invitado',
@@ -345,6 +354,15 @@ export const translations = {
     maxInvitationsReached: 'Sie haben das Maximum an Einladungen erreicht.',
     pwaNoteTitle: 'Haben Sie die App bereits auf Ihrem Telefon installiert?',
     pwaNoteText: 'Wenn Sie Ihren Link per WhatsApp erhalten haben, öffnen Sie die Weihnachtsmarkt-App auf Ihrem Telefon und geben Sie hier Ihren Aktivierungscode ein. Sie müssen das nur einmal tun. Danach können Sie jederzeit auf „Meine Miete“ zugreifen und Ihren QR-Code vorzeigen.',
+    activationScreenTitle: 'Zugangs-Aktivierung',
+    activationScreenSubtitle: 'Sie haben einen Aktivierungslink für Ihren Stand auf dem Weihnachtsmarkt geöffnet. Wählen Sie aus, wie Sie diesen nutzen möchten:',
+    optionInstalledAppTitle: '1. In der installierten App verwenden',
+    optionInstalledAppDesc: 'Wenn Sie die Weihnachtsmarkt-App bereits auf Ihrem Telefon installiert haben, kopieren Sie diesen Code und fügen Sie ihn im Bereich „Meine Miete“ Ihrer App ein.',
+    copyActivationCode: 'Aktivierungscode kopieren',
+    codeCopied: 'Code kopiert!',
+    optionBrowserTitle: '2. Hier aktivieren',
+    optionBrowserDesc: 'Wenn Sie die Anwendung lieber direkt in diesem Webbrowser nutzen möchten, klicken Sie auf die Schaltfläche.',
+    activateHereButton: 'Zugang in diesem Browser aktivieren',
 
     // Guest Portal
     guestPortalTitle: 'Gäste-Registrierung',

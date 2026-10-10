@@ -210,12 +210,13 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
       const secreto = getOrCreateSecretoDispositivo(String(alquilerId));
       const res = await backendService.crearInvitacion(String(alquilerId), secreto);
       if (!res.ok) {
-        throw new Error(res.error || 'No se pudo generar la invitación');
+        setInviteError(res.error || res.mensaje || (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'No se pudo generar la invitación'));
+        return;
       }
       // Re-fetch rental data using miAlquilerDispositivo
       await fetchRental(String(alquilerId), false);
     } catch (err: any) {
-      setInviteError(err.message || 'Error al crear invitación');
+      setInviteError(err.message || (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'Error al crear invitación'));
     } finally {
       setCreatingInvite(false);
     }

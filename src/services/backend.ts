@@ -307,10 +307,12 @@ class BackendService {
     alquilerId: string,
     secretoDispositivo: string,
     nombreSugerido?: string
-  ): Promise<{ ok: boolean; token_invitacion?: string; error?: string }> {
-    const res = await this.postRequest<{ ok: boolean; token_invitacion?: string; error?: string }>({
+  ): Promise<{ ok: boolean; token_invitacion?: string; error?: string; [key: string]: any }> {
+    const res = await this.postRequest<{ ok: boolean; token_invitacion?: string; error?: string; [key: string]: any }>({
       action: 'crearInvitacion',
       AlquilerID: String(alquilerId).trim(),
+      PersonaID: String(alquilerId).trim(),
+      PersonaTipo: 'CLIENTE',
       SecretoDispositivo: secretoDispositivo,
       nombre: nombreSugerido,
     });

@@ -38,6 +38,39 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
 
   const [personaId, setPersonaId] = useState<string | null>(null);
 
+  const [qrCodeText, setQrCodeText] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState(false);
+
+  const fetchQrCode = async (currentPersonaId: string) => {
+    const secreto = localStorage.getItem('wm_client_secreto') || getOrCreateSecretoDispositivo(currentPersonaId);
+    if (!currentPersonaId || !secreto) return;
+
+    setQrLoading(true);
+    setQrError(false);
+    try {
+      const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto);
+      if (qrRes && qrRes.ok) {
+        const qrText = qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
+        if (qrText) {
+          setQrCodeText(String(qrText));
+          setQrError(false);
+        } else {
+          setQrError(true);
+          setQrCodeText(null);
+        }
+      } else {
+        setQrError(true);
+        setQrCodeText(null);
+      }
+    } catch {
+      setQrError(true);
+      setQrCodeText(null);
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
   const fetchRental = async (tokenOrId: string, shouldActivate: boolean = false) => {
     if (!tokenOrId) return;
     setLoading(true);
@@ -99,17 +132,8 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
       localStorage.setItem('wm_client_alquiler_id', String(currentPersonaId));
       localStorage.setItem('wm_client_secreto', secreto);
 
-      try {
-        const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto);
-        if (qrRes && qrRes.ok) {
-          data.qr_acceso = qrRes.qr_acceso || qrRes.QR || undefined;
-        } else {
-          data.qr_acceso = undefined;
-        }
-      } catch {
-        data.qr_acceso = undefined;
-      }
       setRentalData(data);
+      await fetchQrCode(String(currentPersonaId));
     } catch (err: any) {
       setError(err.message || (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido'));
       setRentalData(null);
@@ -132,38 +156,42 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
     }
   }, [initialToken]);
 
-  // QR automatic renewal every 25 seconds using refs to prevent interval reset
-  const rentalDataRef = useRef(rentalData);
-  rentalDataRef.current = rentalData;
-  const activeTokenRef = useRef(activeToken);
-  activeTokenRef.current = activeToken;
+  // QR automatic renewal every 25 seconds and on visibility/focus changes
   const personaIdRef = useRef(personaId);
   personaIdRef.current = personaId;
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const token = activeTokenRef.current;
-      const data = rentalDataRef.current;
+    const interval = setInterval(() => {
       const pId = personaIdRef.current;
-      if (!data || !token) return;
-
-      const currentPersonaId = pId || data.alquiler?.id || data.alquiler?.AlquilerID || token;
-      const secreto = getOrCreateSecretoDispositivo(String(currentPersonaId));
-
-      try {
-        const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto);
-        if (qrRes && qrRes.ok) {
-          const newQr = qrRes.qr_acceso || qrRes.QR;
-          if (newQr) {
-            setRentalData(prev => prev ? { ...prev, qr_acceso: newQr } : null);
-          }
-        }
-      } catch {
-        // ignore network hiccups
+      if (pId) {
+        fetchQrCode(pId);
       }
     }, 25000);
 
-    return () => clearInterval(interval);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const pId = personaIdRef.current;
+        if (pId) {
+          fetchQrCode(pId);
+        }
+      }
+    };
+
+    const handleFocus = () => {
+      const pId = personaIdRef.current;
+      if (pId) {
+        fetchQrCode(pId);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const handleManualLogin = (e: React.FormEvent) => {
@@ -410,48 +438,63 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
             <div className="p-6 sm:p-8 rounded-2xl bg-white border border-gray-200 shadow-sm text-center flex flex-col items-center justify-center">
               <div className="flex items-center gap-1.5 text-red-700 font-bold text-xs uppercase tracking-wider mb-2">
                 <ShieldCheck className="w-4 h-4" />
-                <span>{t.personalQRTitle}</span>
+                <span>{t.myAccessQrTitle}</span>
               </div>
               <p className="text-xs text-gray-600 mb-4 max-w-xs">
                 {t.personalQRInstructions}
               </p>
 
               {/* QR Code */}
-              {rentalData.qr_acceso ? (
-                <div className="p-3 bg-white rounded-xl shadow-xs border border-gray-200 inline-block mb-3">
+              {qrLoading && !qrCodeText && (
+                <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 inline-block mb-3 text-center w-64 h-64 flex flex-col items-center justify-center">
+                  <RefreshCw className="w-8 h-8 text-red-700 animate-spin mb-2" />
+                  <span className="text-xs font-semibold text-gray-700">
+                    {t.updatingCode}
+                  </span>
+                </div>
+              )}
+
+              {!qrLoading && qrCodeText && !qrError ? (
+                <div className="p-4 bg-white rounded-xl shadow-xs border border-gray-200 inline-block mb-3">
                   <QRCodeSVG
-                    value={rentalData.qr_acceso}
-                    size={150}
+                    value={qrCodeText}
+                    size={220}
                     level="H"
                     includeMargin={false}
                   />
+                  {qrLoading && (
+                    <div className="text-[10px] text-red-700 font-semibold mt-1 flex items-center justify-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>{t.updatingCode}</span>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 inline-block mb-3 text-center w-40 h-40 flex flex-col items-center justify-center">
+              ) : (qrError || !qrCodeText) && !qrLoading ? (
+                <div className="p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 inline-block mb-3 text-center w-64 h-64 flex flex-col items-center justify-center">
                   <QrCode className="w-8 h-8 text-gray-400 mb-1" />
-                  <span className="text-[11px] font-medium text-gray-500 mb-2">
+                  <span className="text-[11px] font-medium text-gray-500 mb-3">
                     {lang === 'de' ? 'QR nicht verfügbar' : 'QR no disponible'}
                   </span>
                   <button
                     onClick={() => {
                       const currentPersonaId = personaId || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID || activeToken;
-                      const secreto = getOrCreateSecretoDispositivo(activeToken || currentPersonaId);
-                      backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto).then(res => {
-                        if (res && res.ok && res.qr_acceso) {
-                          setRentalData(prev => prev ? { ...prev, qr_acceso: res.qr_acceso! } : null);
-                        }
-                      });
+                      if (currentPersonaId) fetchQrCode(String(currentPersonaId));
                     }}
-                    className="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 text-[10px] font-semibold transition"
+                    className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white text-xs font-semibold transition shadow-xs"
                   >
-                    {lang === 'de' ? 'Wiederholen' : 'Reintentar'}
+                    {t.retry}
                   </button>
                 </div>
-              )}
+              ) : null}
 
-              <span className="text-xs font-mono text-gray-600 bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
-                Pase Titular • Stand #{rentalData.alquiler?.stand}
-              </span>
+              <div className="mt-2 text-center">
+                <span className="text-sm font-bold text-gray-900 block">
+                  {rentalData.alquiler?.cliente || '-'}
+                </span>
+                <span className="text-xs font-mono text-red-700 font-bold block mt-0.5">
+                  Stand #{rentalData.alquiler?.stand}
+                </span>
+              </div>
             </div>
           </div>
 

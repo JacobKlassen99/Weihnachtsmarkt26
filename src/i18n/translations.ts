@@ -116,6 +116,8 @@ export const translations = {
     optionBrowserTitle: '2. Activar aquí',
     optionBrowserDesc: 'Si prefieres usar la aplicación directamente en este navegador web, pulsa el botón para confirmar.',
     activateHereButton: 'Activar acceso en este navegador',
+    myAccessQrTitle: 'Mi código QR de acceso',
+    updatingCode: 'Actualizando código...',
 
     // Guest Portal
     guestPortalTitle: 'Registro de Invitado',
@@ -363,6 +365,8 @@ export const translations = {
     optionBrowserTitle: '2. Hier aktivieren',
     optionBrowserDesc: 'Wenn Sie die Anwendung lieber direkt in diesem Webbrowser nutzen möchten, klicken Sie auf die Schaltfläche.',
     activateHereButton: 'Zugang in diesem Browser aktivieren',
+    myAccessQrTitle: 'Mein QR-Einlasscode',
+    updatingCode: 'Code wird aktualisiert...',
 
     // Guest Portal
     guestPortalTitle: 'Gäste-Registrierung',

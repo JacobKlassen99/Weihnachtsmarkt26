@@ -52,6 +52,7 @@ export const PublicView: React.FC<Props> = ({
   const [formStandNumero, setFormStandNumero] = useState<string>('');
   const [formNombre, setFormNombre] = useState('');
   const [formTelefono, setFormTelefono] = useState('');
+  const [formObservacion, setFormObservacion] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submittedData, setSubmittedData] = useState<{
@@ -92,6 +93,7 @@ export const PublicView: React.FC<Props> = ({
   const handleOpenRequest = (stand?: Stand) => {
     setSubmitError(null);
     setSubmittedData(null);
+    setFormObservacion('');
     if (stand) {
       setSelectedStandToRequest(stand);
       setFormCategory(stand.Categoria || stand.categoria || 'Comida');
@@ -106,11 +108,11 @@ export const PublicView: React.FC<Props> = ({
 
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formStandNumero || !formNombre || !formTelefono) {
+    if (!formStandNumero || !formNombre || !formTelefono || !formObservacion.trim() || formObservacion.trim().length < 10) {
       setSubmitError(
         lang === 'de'
-          ? 'Bitte füllen Sie alle erforderlichen Felder aus.'
-          : 'Por favor completa todos los campos requeridos.'
+          ? 'Bitte beschreiben Sie, was Sie an Ihrem Stand verkaufen oder anbieten möchten (mindestens 10 Zeichen).'
+          : 'Por favor describe qué venderás u ofrecerás en tu stand (mínimo 10 caracteres).'
       );
       return;
     }
@@ -126,6 +128,7 @@ export const PublicView: React.FC<Props> = ({
         categoria: formCategory,
         nombre: formNombre.trim(),
         telefono: formTelefono.trim(),
+        observacion: formObservacion.trim(),
         idioma: lang,
       });
 
@@ -559,6 +562,24 @@ export const PublicView: React.FC<Props> = ({
                     value={formTelefono}
                     onChange={(e) => setFormTelefono(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
+                  />
+                </div>
+
+                {/* What will you sell / Observacion */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    {t.whatWillYouSell} *
+                  </label>
+                  <p className="text-[11px] text-gray-500 mb-1.5 leading-relaxed">
+                    {t.whatWillYouSellSubtitle}
+                  </p>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder={t.whatWillYouSellPlaceholder}
+                    value={formObservacion}
+                    onChange={(e) => setFormObservacion(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 resize-none"
                   />
                 </div>
 

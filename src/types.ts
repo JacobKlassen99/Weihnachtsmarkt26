@@ -49,6 +49,8 @@ export interface Solicitud {
   categoria: string;
   nombre: string;
   telefono: string;
+  observacion?: string;
+  Observacion?: string;
   fecha: string;
   estado: 'pendiente' | 'confirmada' | 'rechazada' | string;
   gestion?: string;

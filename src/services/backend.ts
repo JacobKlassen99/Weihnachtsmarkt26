@@ -210,6 +210,7 @@ class BackendService {
     categoria: string;
     nombre: string;
     telefono: string;
+    observacion?: string;
     idioma?: string;
   }): Promise<{ ok: boolean; error?: string; mensaje?: string; whatsapp_url?: string; [key: string]: any }> {
     const payload: Record<string, unknown> = {
@@ -217,11 +218,14 @@ class BackendService {
       StandID: params.standId ? String(params.standId).trim() : undefined,
       NombreCompleto: String(params.nombre || '').trim(),
       Telefono: String(params.telefono || '').trim(),
+      Observacion: String(params.observacion || '').trim(),
       Idioma: String(params.idioma || 'es').trim(),
       stand: params.stand,
       categoria: params.categoria,
       nombre: String(params.nombre || '').trim(),
       telefono: String(params.telefono || '').trim(),
+      observacion: String(params.observacion || '').trim(),
+      Observaciones: String(params.observacion || '').trim(),
     };
 
     if (!payload.StandID) {
@@ -515,6 +519,7 @@ class BackendService {
             const fechaVal = s.FechaSolicitud || s.fechaSolicitud || s.fecha || s.Fecha || '';
             const estadoVal = String(s.Estado || s.estado || 'pendiente').toLowerCase();
             const catVal = s.Categoria || s.categoria || 'Comida';
+            const obsVal = s.Observacion || s.observacion || s.Observaciones || s.observaciones || '';
             return {
               ...s,
               id: idVal,
@@ -525,6 +530,8 @@ class BackendService {
               NombreCompleto: nomVal,
               telefono: telVal,
               Telefono: telVal,
+              observacion: obsVal,
+              Observacion: obsVal,
               fecha: fechaVal,
               FechaSolicitud: fechaVal,
               estado: estadoVal,

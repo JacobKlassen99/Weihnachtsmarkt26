@@ -1226,6 +1226,7 @@ export const AdminView: React.FC<Props> = ({
                     <th className="p-3">Stand</th>
                     <th className="p-3">{t.fullName}</th>
                     <th className="p-3">{t.phone}</th>
+                    <th className="p-3">{t.observation}</th>
                     <th className="p-3">{t.requestDate}</th>
                     <th className="p-3">{t.status}</th>
                     <th className="p-3 text-right">{t.actions}</th>
@@ -1237,6 +1238,7 @@ export const AdminView: React.FC<Props> = ({
                       <td className="p-3 font-mono font-bold text-red-700">#{sol.stand}</td>
                       <td className="p-3 font-semibold text-gray-900">{sol.nombre}</td>
                       <td className="p-3 font-mono">{sol.telefono ? String(sol.telefono) : '-'}</td>
+                      <td className="p-3 max-w-xs text-gray-700">{sol.observacion || sol.Observacion || '-'}</td>
                       <td className="p-3 text-gray-500">{sol.fecha || '-'}</td>
                       <td className="p-3">
                         <span
@@ -1292,7 +1294,7 @@ export const AdminView: React.FC<Props> = ({
                   ))}
                   {adminData.solicitudes.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-gray-500">
+                      <td colSpan={7} className="p-8 text-center text-gray-500">
                         {lang === 'de' ? 'Keine Anfragen vorhanden.' : 'No hay solicitudes registradas.'}
                       </td>
                     </tr>

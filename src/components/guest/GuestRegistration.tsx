@@ -76,15 +76,32 @@ export const GuestRegistration: React.FC<Props> = ({
         setInvitadoId(activeId);
         if (storedNombre) setRegisteredName(storedNombre);
         try {
+          // If storedInvitadoId is a token or doesn't start with INV-, lookup official InvitadoID
+          if (storedInvitadoId.toLowerCase().includes('inv_') || !storedInvitadoId.startsWith('INV-')) {
+            try {
+              const infoLookup = await backendService.consultarInvitacion(storedInvitadoId);
+              if (infoLookup.valida) {
+                const realId = infoLookup.invitado_id || infoLookup.InvitadoID || infoLookup.id || infoLookup.Invitado_ID;
+                if (realId) {
+                  activeId = String(realId);
+                  localStorage.setItem('wm_guest_invitado_id', activeId);
+                  setInvitadoId(activeId);
+                }
+              }
+            } catch {
+              // ignore lookup error
+            }
+          }
+
           let qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
 
           // Auto-recovery if storedInvitadoId was saved as a token instead of InvitadoID
           if (!qrRes || !qrRes.ok) {
             try {
               const infoLookup = await backendService.consultarInvitacion(storedInvitadoId);
-              if (infoLookup.valida && (infoLookup.invitado_id || infoLookup.InvitadoID || infoLookup.id)) {
-                const realId = infoLookup.invitado_id || infoLookup.InvitadoID || infoLookup.id;
-                if (realId && realId !== storedInvitadoId) {
+              if (infoLookup.valida) {
+                const realId = infoLookup.invitado_id || infoLookup.InvitadoID || infoLookup.id || infoLookup.Invitado_ID;
+                if (realId && String(realId) !== activeId) {
                   activeId = String(realId);
                   localStorage.setItem('wm_guest_invitado_id', activeId);
                   setInvitadoId(activeId);
@@ -227,17 +244,21 @@ export const GuestRegistration: React.FC<Props> = ({
       }
 
       let resolvedInvitadoId = res.invitado_id || res.InvitadoID || res.id || res.Invitado_ID || res.data?.invitado_id || res.data?.InvitadoID || res.data?.id;
-      if (!resolvedInvitadoId || String(resolvedInvitadoId).includes('inv_') || String(resolvedInvitadoId) === token) {
-        try {
-          const infoAfter = await backendService.consultarInvitacion(token);
-          if (infoAfter.valida && (infoAfter.invitado_id || infoAfter.InvitadoID || infoAfter.id)) {
-            resolvedInvitadoId = infoAfter.invitado_id || infoAfter.InvitadoID || infoAfter.id;
+      
+      // Always consult invitation to get official backend InvitadoID (e.g. INV-...)
+      try {
+        const infoAfter = await backendService.consultarInvitacion(token);
+        if (infoAfter.valida) {
+          const officialId = infoAfter.invitado_id || infoAfter.InvitadoID || infoAfter.id || infoAfter.Invitado_ID;
+          if (officialId) {
+            resolvedInvitadoId = officialId;
           }
-        } catch {
-          // fallback
         }
+      } catch {
+        // fallback
       }
-      resolvedInvitadoId = resolvedInvitadoId || token;
+
+      resolvedInvitadoId = resolvedInvitadoId || res.invitado_id || res.id || token;
 
       setInvitadoId(String(resolvedInvitadoId));
       localStorage.setItem('wm_guest_invitado_id', String(resolvedInvitadoId));
@@ -313,7 +334,14 @@ export const GuestRegistration: React.FC<Props> = ({
 
             {/* QR Code */}
             <div className="p-4 bg-white rounded-2xl shadow-xs border border-gray-200 inline-block mb-4">
-              <QRCodeSVG value={registeredQR} size={220} level="H" includeMargin={false} />
+              <QRCodeSVG
+                value={registeredQR}
+                size={260}
+                level="H"
+                includeMargin={true}
+                fgColor="#000000"
+                bgColor="#FFFFFF"
+              />
             </div>
 
             <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 mb-6 text-xs text-gray-700 space-y-1.5 text-left">

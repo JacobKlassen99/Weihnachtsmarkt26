@@ -16,3 +16,11 @@
   display: none !important;
 }
 
+/* Force QR codes to always display pure black on pure white, resisting dark mode or filters */
+svg[xmlns="http://www.w3.org/2000/svg"] {
+  color-scheme: light;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+

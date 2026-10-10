@@ -459,9 +459,11 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                 <div className="p-4 bg-white rounded-xl shadow-xs border border-gray-200 inline-block mb-3">
                   <QRCodeSVG
                     value={qrCodeText}
-                    size={220}
+                    size={260}
                     level="H"
-                    includeMargin={false}
+                    includeMargin={true}
+                    fgColor="#000000"
+                    bgColor="#FFFFFF"
                   />
                   {qrLoading && (
                     <div className="text-[10px] text-red-700 font-semibold mt-1 flex items-center justify-center gap-1">

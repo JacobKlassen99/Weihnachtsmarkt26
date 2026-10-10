@@ -3,6 +3,8 @@ import { RefreshCw, Sparkles, X } from 'lucide-react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { translations } from '../i18n/translations';
 
+declare const __BUILD_VERSION__: string;
+
 interface Props {
   lang: 'es' | 'de';
   hasUnsavedForms?: boolean;
@@ -11,6 +13,9 @@ interface Props {
 export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = false }) => {
   const t = translations[lang];
   const [dismissed, setDismissed] = useState(false);
+  const [newVersionAvailable, setNewVersionAvailable] = useState(false);
+
+  const currentAppVersion = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : 'dev';
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -18,10 +23,10 @@ export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = fa
   } = useRegisterSW({
     onRegisteredSW(swUrl, r) {
       if (r) {
-        // Check for updates periodically every 5 minutes
+        // Check for updates periodically every 15 seconds
         const interval = setInterval(() => {
           r.update().catch(() => {});
-        }, 5 * 60 * 1000);
+        }, 15 * 1000);
 
         // Check when tab becomes visible/active or window regains focus
         const handleVisibility = () => {
@@ -44,11 +49,62 @@ export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = fa
     },
   });
 
-  if (!needRefresh || dismissed) {
+  // Polling version.json every 15 seconds + focus / visibility
+  useEffect(() => {
+    if (currentAppVersion === 'dev') return;
+
+    const checkVersionJson = async () => {
+      try {
+        const res = await fetch(`/version.json?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.version && data.version !== currentAppVersion) {
+            setNewVersionAvailable(true);
+          }
+        }
+      } catch {
+        // ignore network error
+      }
+    };
+
+    // Check immediately on mount
+    checkVersionJson();
+
+    const interval = setInterval(checkVersionJson, 15 * 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkVersionJson();
+      }
+    };
+
+    const handleFocus = () => {
+      checkVersionJson();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentAppVersion]);
+
+  const showBanner = (needRefresh || newVersionAvailable) && !dismissed;
+
+  if (!showBanner) {
     return null;
   }
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (hasUnsavedForms) {
       const confirmUpdate = window.confirm(
         lang === 'de'
@@ -60,6 +116,15 @@ export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = fa
 
     // Stop active camera in Portería if scanning
     window.dispatchEvent(new CustomEvent('weihnachtsmarkt-stop-camera'));
+
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    } catch {
+      // ignore
+    }
 
     // Apply update and reload once when new SW takes control
     updateServiceWorker(true);
@@ -107,4 +172,3 @@ export const UpdateNotification: React.FC<Props> = ({ lang, hasUnsavedForms = fa
     </aside>
   );
 };
-

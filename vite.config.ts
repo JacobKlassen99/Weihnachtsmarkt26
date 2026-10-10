@@ -1,11 +1,34 @@
+import fs from 'fs';
+import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 import {defineConfig, Plugin} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 const GOOGLE_APPS_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbzPYXuXu8FSvtmRVaDywv8OxsDZZX45WfxpNBoPmdF29cnezThtfv2bxRxoELdTjUSz/exec';
+
+const buildVersion = `wm-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+function versionJsonPlugin(): Plugin {
+  return {
+    name: 'version-json-plugin',
+    writeBundle() {
+      const versionData = JSON.stringify({ version: buildVersion, timestamp: new Date().toISOString() }, null, 2);
+      const outDir = path.resolve(__dirname, 'dist');
+      if (!fs.existsSync(outDir)) {
+        fs.mkdirSync(outDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(outDir, 'version.json'), versionData, 'utf-8');
+
+      const publicDir = path.resolve(__dirname, 'public');
+      if (!fs.existsSync(publicDir)) {
+        fs.mkdirSync(publicDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(publicDir, 'version.json'), versionData, 'utf-8');
+    },
+  };
+}
 
 function gasProxyPlugin(): Plugin {
   return {
@@ -90,10 +113,14 @@ function gasProxyPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
+    define: {
+      __BUILD_VERSION__: JSON.stringify(buildVersion),
+    },
     plugins: [
       react(),
       tailwindcss(),
       gasProxyPlugin(),
+      versionJsonPlugin(),
       VitePWA({
         registerType: 'prompt',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],

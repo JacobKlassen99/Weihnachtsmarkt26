@@ -33,6 +33,39 @@ export const GuestRegistration: React.FC<Props> = ({
   const [registeredQR, setRegisteredQR] = useState<string | null>(null);
   const [registeredName, setRegisteredName] = useState<string | null>(null);
   const [invitadoId, setInvitadoId] = useState<string | null>(null);
+  const [adminPhone, setAdminPhone] = useState<string>('');
+
+  const handleContactAdmin = async () => {
+    let phone = adminPhone;
+    if (!phone) {
+      try {
+        const publicData = await backendService.getPublicData();
+        if (publicData?.configuracion?.WHATSAPP_ADMIN) {
+          phone = publicData.configuracion.WHATSAPP_ADMIN;
+          setAdminPhone(phone);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const cleanPhone = String(phone || '').replace(/\D/g, '');
+    if (!cleanPhone) {
+      alert(
+        lang === 'de'
+          ? 'Die Administrator-WhatsApp-Nummer ist nicht konfiguriert.'
+          : 'El número de WhatsApp del administrador no está configurado en los parámetros.'
+      );
+      return;
+    }
+
+    const message = encodeURIComponent(
+      lang === 'de'
+        ? 'Hallo, ich habe ein Problem mit meiner Einladung für den Weihnachtsmarkt.'
+        : 'Hola, tengo un problema con mi invitación en el Weihnachtsmarkt.'
+    );
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+  };
 
   const fetchGuestQr = async (id: string, sec: string) => {
     if (!id || !sec) return;
@@ -69,6 +102,15 @@ export const GuestRegistration: React.FC<Props> = ({
 
       setLoading(true);
       setError(null);
+
+      try {
+        const publicData = await backendService.getPublicData();
+        if (publicData?.configuracion?.WHATSAPP_ADMIN) {
+          setAdminPhone(publicData.configuracion.WHATSAPP_ADMIN);
+        }
+      } catch {
+        // ignore
+      }
 
       // SITUACIÓN B: Invitado ya activado (tiene credenciales guardadas en este dispositivo)
       if (storedInvitadoId && storedSecreto) {
@@ -304,14 +346,12 @@ export const GuestRegistration: React.FC<Props> = ({
               >
                 {t.back}
               </button>
-              <a
-                href="https://wa.me/75593587?text=Hola,%20tengo%20un%20problema%20con%20mi%20pase%20de%20invitado%20en%20el%20Weihnachtsmarkt."
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5"
+              <button
+                onClick={handleContactAdmin}
+                className="w-full py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>{t.contactAdmin || 'Contactar al Administrador'}</span>
-              </a>
+              </button>
             </div>
           </div>
         )}

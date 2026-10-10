@@ -270,14 +270,19 @@ export const AdminView: React.FC<Props> = ({
       return;
     }
 
-    // Check duplicate stand number when creating a new stand
+    // Check duplicate stand number
     const standId = editingStand.StandID || editingStand.id;
-    const isNewStand = !standId;
-    if (isNewStand && adminData?.stands?.some((s) => String(s.Numero || s.numero).trim() === standNum)) {
+    if (
+      adminData?.stands?.some(
+        (s) =>
+          String(s.Numero || s.numero).trim() === standNum &&
+          String(s.StandID || s.id || '') !== String(standId || '')
+      )
+    ) {
       setStandModalError(
         lang === 'de'
           ? `Ein Stand mit der Nummer #${standNum} existiert bereits`
-          : `Ya existe un stand con el número #${standNum}`
+          : `Ya existe otro stand con el número #${standNum}`
       );
       return;
     }
@@ -1149,7 +1154,26 @@ export const AdminView: React.FC<Props> = ({
                         <button
                           onClick={() => {
                             setStandModalError(null);
-                            setEditingStand(stand);
+                            setEditingStand({
+                              ...stand,
+                              StandID: stand.StandID || stand.id,
+                              numero: stand.Numero !== undefined ? stand.Numero : (stand.numero ?? ''),
+                              Numero: stand.Numero !== undefined ? stand.Numero : (stand.numero ?? ''),
+                              nombre: stand.Nombre || stand.nombre || '',
+                              Nombre: stand.Nombre || stand.nombre || '',
+                              categoria: stand.Categoria || stand.categoria || 'Comida',
+                              Categoria: stand.Categoria || stand.categoria || 'Comida',
+                              precio: stand.Precio !== undefined ? stand.Precio : (stand.precio ?? 100),
+                              Precio: stand.Precio !== undefined ? stand.Precio : (stand.precio ?? 100),
+                              estado: String(stand.Estado || stand.estado || 'disponible').toLowerCase(),
+                              Estado: String(stand.Estado || stand.estado || 'DISPONIBLE').toUpperCase(),
+                              descripcion: stand.Descripcion || stand.descripcion || '',
+                              Descripcion: stand.Descripcion || stand.descripcion || '',
+                              PosicionX: stand.PosicionX !== undefined ? stand.PosicionX : (stand.posicion_x ?? 0),
+                              PosicionY: stand.PosicionY !== undefined ? stand.PosicionY : (stand.posicion_y ?? 0),
+                              Ancho: stand.Ancho !== undefined ? stand.Ancho : (stand.ancho ?? 1),
+                              Alto: stand.Alto !== undefined ? stand.Alto : (stand.alto ?? 1),
+                            });
                             setStandModalOpen(true);
                           }}
                           className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs"
@@ -1481,53 +1505,63 @@ export const AdminView: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {adminData.usuarios.map((u) => (
-                    <tr key={u.usuario} className="hover:bg-gray-50/80 transition">
-                      <td className="p-3 font-mono font-bold text-gray-900">{u.usuario}</td>
-                      <td className="p-3">{u.nombre}</td>
-                      <td className="p-3 capitalize">{u.rol}</td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            u.estado === 'activo'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : 'bg-gray-100 text-gray-600 border border-gray-200'
-                          }`}
-                        >
-                          {u.estado}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              setPasswordModalError(null);
-                              setNewPasswordValue('');
-                              setTargetUserToChangePass(u.usuario);
-                              setTargetUserIdToChangePass(u.UsuarioID || u.id || (u as any).ID || u.usuario);
-                              setPasswordModalOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs"
-                            title={t.changePassword}
+                  {adminData.usuarios.map((u) => {
+                    const isActivo = u.Activo === 'SI' || u.activo === 'SI' || u.estado === 'activo';
+                    return (
+                      <tr key={u.UsuarioID || u.usuario || u.id} className="hover:bg-gray-50/80 transition">
+                        <td className="p-3 font-mono font-bold text-gray-900">{u.Usuario || u.usuario}</td>
+                        <td className="p-3">{u.Nombre || u.nombre}</td>
+                        <td className="p-3 capitalize">{u.Rol || u.rol}</td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              isActivo
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                            }`}
                           >
-                            <KeyRound className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleUserStatus(u)}
-                            disabled={actionInProgress === (u.UsuarioID || u.id || u.usuario)}
-                            className="p-1.5 rounded-lg bg-white hover:bg-gray-100 disabled:opacity-50 text-gray-700 border border-gray-200 transition shadow-xs"
-                            title={t.toggleStatus}
-                          >
-                            {actionInProgress === (u.UsuarioID || u.id || u.usuario) ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Sliders className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
+                            {isActivo ? (lang === 'de' ? 'aktiv' : 'activo') : (lang === 'de' ? 'inaktiv' : 'inactivo')}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                setPasswordModalError(null);
+                                setNewPasswordValue('');
+                                setTargetUserToChangePass(u.Usuario || u.usuario);
+                                setTargetUserIdToChangePass(u.UsuarioID || u.id || u.usuario);
+                                setPasswordModalOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs"
+                              title={t.changePassword}
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleUserStatus(u)}
+                              disabled={actionInProgress === (u.UsuarioID || u.id || u.usuario)}
+                              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 disabled:opacity-50 text-gray-700 border border-gray-200 transition shadow-xs"
+                              title={t.toggleStatus}
+                            >
+                              {actionInProgress === (u.UsuarioID || u.id || u.usuario) ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Sliders className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {adminData.usuarios.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-gray-500">
+                        {lang === 'de' ? 'Keine Benutzer gefunden.' : 'No hay usuarios registrados en esta gestión.'}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

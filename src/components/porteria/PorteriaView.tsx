@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   StopCircle,
+  Video,
   XCircle,
 } from 'lucide-react';
 import { translations } from '../../i18n/translations';
@@ -30,14 +31,36 @@ export const PorteriaView: React.FC<Props> = ({
   const t = translations[lang];
 
   const [scanning, setScanning] = useState(false);
+  const [startingCamera, setStartingCamera] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [processing, setProcessing] = useState(false);
   const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
   const [scanHistory, setScanHistory] = useState<ScanResult[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
+  const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+
   const qrReaderRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<{ code: string; time: number } | null>(null);
+
+  // Load available cameras on mount
+  useEffect(() => {
+    Html5Qrcode.getCameras()
+      .then((devices) => {
+        if (devices && devices.length > 0) {
+          setCameras(devices);
+          // Prefer back camera if available
+          const backCam = devices.find((d) =>
+            /back|rear|environment|traseira|trasera/i.test(d.label)
+          );
+          setSelectedCameraId(backCam ? backCam.id : devices[0].id);
+        }
+      })
+      .catch(() => {
+        // Camera enumeration might be blocked or unavailable before permission is granted
+      });
+  }, []);
 
   // Play audio beep using Web Audio API
   const playSound = (success: boolean) => {
@@ -116,42 +139,69 @@ export const PorteriaView: React.FC<Props> = ({
   };
 
   const startScanner = async () => {
+    if (startingCamera || scanning) return;
+    setStartingCamera(true);
     setCameraError(null);
+
     try {
       const elementId = 'qr-reader-container';
       if (!qrReaderRef.current) {
         qrReaderRef.current = new Html5Qrcode(elementId);
       }
 
-      await qrReaderRef.current.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        (decodedText) => {
-          handleProcessCode(decodedText);
-        },
-        () => {
-          // ignore scan frame error
-        }
-      );
+      const scannerInstance = qrReaderRef.current;
+      if (scannerInstance.isScanning) {
+        await scannerInstance.stop().catch(() => {});
+      }
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+      };
+
+      // Determine camera target (selected ID or facingMode environment)
+      let target: any = selectedCameraId ? selectedCameraId : { facingMode: 'environment' };
+
+      try {
+        await scannerInstance.start(
+          target,
+          config,
+          (decodedText) => handleProcessCode(decodedText),
+          () => {}
+        );
+      } catch (firstErr) {
+        // If specific camera ID failed, fallback to generic environment or user camera
+        console.warn('Specific camera start failed, trying environment fallback:', firstErr);
+        await scannerInstance.start(
+          { facingMode: 'environment' },
+          config,
+          (decodedText) => handleProcessCode(decodedText),
+          () => {}
+        );
+      }
+
       setScanning(true);
     } catch (err: any) {
       console.error('Camera start error:', err);
       setCameraError(
-        lang === 'de'
-          ? 'Kamera konnte nicht gestartet werden. Bitte Berechtigungen prüfen.'
-          : 'No se pudo iniciar la cámara. Verifica los permisos del navegador.'
+        err?.message ||
+          (lang === 'de'
+            ? 'Kamera konnte nicht gestartet werden. Bitte Berechtigungen prüfen.'
+            : 'No se pudo iniciar la cámara. Verifica los permisos del navegador o selecciona otra cámara.')
       );
       setScanning(false);
+    } finally {
+      setStartingCamera(false);
     }
   };
 
   const stopScanner = async () => {
-    if (qrReaderRef.current && scanning) {
+    if (qrReaderRef.current) {
       try {
-        await qrReaderRef.current.stop();
+        if (qrReaderRef.current.isScanning) {
+          await qrReaderRef.current.stop();
+        }
       } catch (err) {
         console.error('Error stopping camera:', err);
       }
@@ -161,8 +211,14 @@ export const PorteriaView: React.FC<Props> = ({
 
   useEffect(() => {
     return () => {
-      if (qrReaderRef.current && qrReaderRef.current.isScanning) {
-        qrReaderRef.current.stop().catch(() => {});
+      if (qrReaderRef.current) {
+        try {
+          if (qrReaderRef.current.isScanning) {
+            qrReaderRef.current.stop().catch(() => {});
+          }
+        } catch {
+          // ignore cleanup errors
+        }
       }
     };
   }, []);
@@ -259,7 +315,7 @@ export const PorteriaView: React.FC<Props> = ({
 
       {/* Camera Live Preview & Controls */}
       <div className="p-6 rounded-2xl bg-white border border-gray-200 shadow-sm mb-6">
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
             <Camera className="w-5 h-5 text-red-700" />
             <h3 className="text-base font-bold text-gray-900">
@@ -267,15 +323,33 @@ export const PorteriaView: React.FC<Props> = ({
             </h3>
           </div>
 
-          <div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            {cameras.length > 1 && !scanning && (
+              <select
+                value={selectedCameraId}
+                onChange={(e) => setSelectedCameraId(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 text-xs text-gray-800 focus:outline-none focus:border-red-600"
+              >
+                {cameras.map((cam) => (
+                  <option key={cam.id} value={cam.id}>
+                    {cam.label || `Cámara ${cam.id.slice(0, 5)}`}
+                  </option>
+                ))}
+              </select>
+            )}
+
             {!scanning ? (
               <button
                 onClick={startScanner}
-                disabled={!sessionToken || processing}
+                disabled={!sessionToken || startingCamera}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-xs transition active:scale-95 disabled:opacity-50"
               >
-                <Camera className="w-4 h-4" />
-                <span>{t.cameraPermission}</span>
+                {startingCamera ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4" />
+                )}
+                <span>{startingCamera ? 'Iniciando...' : t.cameraPermission}</span>
               </button>
             ) : (
               <button
@@ -290,22 +364,31 @@ export const PorteriaView: React.FC<Props> = ({
         </div>
 
         {cameraError && (
-          <div className="p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
-            {cameraError}
+          <div className="p-4 mb-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <span className="font-bold block mb-0.5">Error de cámara</span>
+              <span>{cameraError}</span>
+            </div>
+            <button
+              onClick={startScanner}
+              className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shrink-0 transition shadow-xs"
+            >
+              Reintentar cámara
+            </button>
           </div>
         )}
 
         {/* Video Mount Point */}
         <div
           id="qr-reader-container"
-          className={`w-full overflow-hidden rounded-xl bg-black border border-gray-300 transition ${
-            scanning ? 'min-h-[280px]' : 'hidden'
+          className={`w-full overflow-hidden rounded-xl bg-black border border-gray-300 transition min-h-[300px] ${
+            scanning ? 'block' : 'hidden'
           }`}
         />
 
         {!scanning && (
-          <div className="text-center py-10 rounded-xl bg-gray-50 border border-dashed border-gray-300">
-            <QrCode className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+          <div className="text-center py-12 rounded-xl bg-gray-50 border border-dashed border-gray-300">
+            <Video className="w-10 h-10 text-gray-400 mx-auto mb-2 opacity-70" />
             <p className="text-xs text-gray-600 max-w-xs mx-auto">
               {t.scanningInstruction}
             </p>

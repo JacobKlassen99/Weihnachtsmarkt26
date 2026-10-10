@@ -1,1 +1,18 @@
 @import "tailwindcss";
+
+#qr-reader-container video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 0.75rem !important;
+}
+
+#qr-reader-container {
+  border: none !important;
+  background: #000 !important;
+}
+
+#qr-reader-container__dashboard_section {
+  display: none !important;
+}
+

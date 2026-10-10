@@ -396,12 +396,74 @@ class BackendService {
 
     const adminData: AdminData = {
       configuracion: res.data?.configuracion || {},
-      stands: Array.isArray(res.data?.stands) ? res.data.stands : [],
+      stands: Array.isArray(res.data?.stands)
+        ? res.data.stands.map((s: any) => ({
+            ...s,
+            id: s.StandID || s.id || '',
+            StandID: s.StandID || s.id || '',
+            numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
+            Numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
+            nombre: s.Nombre || s.nombre || '',
+            Nombre: s.Nombre || s.nombre || '',
+            categoria: s.Categoria || s.categoria || 'Comida',
+            Categoria: s.Categoria || s.categoria || 'Comida',
+            precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
+            Precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
+            estado: String(s.Estado || s.estado || 'disponible').toLowerCase(),
+            Estado: String(s.Estado || s.estado || 'DISPONIBLE').toUpperCase(),
+            posicion_x: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
+            PosicionX: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
+            posicion_y: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
+            PosicionY: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
+            ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
+            Ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
+            alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
+            Alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
+            descripcion: s.Descripcion || s.descripcion || '',
+            Descripcion: s.Descripcion || s.descripcion || '',
+          }))
+        : [],
       solicitudes: Array.isArray(res.data?.solicitudes) ? res.data.solicitudes : [],
       alquileres: Array.isArray(res.data?.alquileres) ? res.data.alquileres : [],
       invitados: Array.isArray(res.data?.invitados) ? res.data.invitados : [],
       accesos: Array.isArray(res.data?.accesos) ? res.data.accesos : [],
-      usuarios: Array.isArray(res.data?.usuarios) ? res.data.usuarios : [],
+      usuarios: Array.isArray(
+        res.data?.usuarios ||
+        res.data?.users ||
+        res.data?.listaUsuarios ||
+        res.data?.lista_usuarios ||
+        res.usuarios
+      )
+        ? (
+            res.data?.usuarios ||
+            res.data?.users ||
+            res.data?.listaUsuarios ||
+            res.data?.lista_usuarios ||
+            res.usuarios
+          ).map((u: any) => {
+            const rawActivo = String(u.Activo || u.activo || u.estado || u.status || 'SI').trim().toUpperCase();
+            const isActivo = rawActivo === 'SI' || rawActivo === 'ACTIVO' || rawActivo === 'TRUE' || rawActivo === '1' || rawActivo === 'YES';
+            return {
+              ...u,
+              id: u.UsuarioID || u.id || u.ID || u.usuarioID || '',
+              UsuarioID: u.UsuarioID || u.id || u.ID || u.usuarioID || '',
+              usuario: u.Usuario || u.usuario || u.username || '',
+              Usuario: u.Usuario || u.usuario || u.username || '',
+              nombre: u.Nombre || u.nombre || u.fullName || u.name || '',
+              Nombre: u.Nombre || u.nombre || u.fullName || u.name || '',
+              rol: String(u.Rol || u.rol || u.role || 'ADMIN').toUpperCase(),
+              Rol: String(u.Rol || u.rol || u.role || 'ADMIN').toUpperCase(),
+              Activo: isActivo ? 'SI' : 'NO',
+              activo: isActivo ? 'SI' : 'NO',
+              estado: isActivo ? 'activo' : 'inactivo',
+              PasswordHash: undefined,
+              passwordHash: undefined,
+              VersionAcceso: u.VersionAcceso || u.versionAcceso || u.version || '',
+              FechaCreacion: u.FechaCreacion || u.fechaCreacion || u.fecha_creacion || '',
+              FechaActualizacion: u.FechaActualizacion || u.fechaActualizacion || u.fecha_actualizacion || '',
+            };
+          })
+        : [],
       gestiones: Array.isArray(res.data?.gestiones) ? res.data.gestiones : [],
     };
 

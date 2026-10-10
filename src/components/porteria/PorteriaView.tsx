@@ -44,22 +44,12 @@ export const PorteriaView: React.FC<Props> = ({
   const qrReaderRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<{ code: string; time: number } | null>(null);
 
-  // Load available cameras on mount
+  // Auto-start scanner on mount
   useEffect(() => {
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length > 0) {
-          setCameras(devices);
-          // Prefer back camera if available
-          const backCam = devices.find((d) =>
-            /back|rear|environment|traseira|trasera/i.test(d.label)
-          );
-          setSelectedCameraId(backCam ? backCam.id : devices[0].id);
-        }
-      })
-      .catch(() => {
-        // Camera enumeration might be blocked or unavailable before permission is granted
-      });
+    const timer = setTimeout(() => {
+      startScanner();
+    }, 300);
+    return () => clearTimeout(timer);
   }, []);
 
   // Play audio beep using Web Audio API
@@ -160,25 +150,90 @@ export const PorteriaView: React.FC<Props> = ({
         aspectRatio: 1.0,
       };
 
-      // Determine camera target (selected ID or facingMode environment)
-      let target: any = selectedCameraId ? selectedCameraId : { facingMode: 'environment' };
-
+      // 1. Get available cameras
+      let devices: Array<{ id: string; label: string }> = [];
       try {
-        await scannerInstance.start(
-          target,
-          config,
-          (decodedText) => handleProcessCode(decodedText),
-          () => {}
-        );
-      } catch (firstErr) {
-        // If specific camera ID failed, fallback to generic environment or user camera
-        console.warn('Specific camera start failed, trying environment fallback:', firstErr);
-        await scannerInstance.start(
-          { facingMode: 'environment' },
-          config,
-          (decodedText) => handleProcessCode(decodedText),
-          () => {}
-        );
+        devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setCameras(devices);
+        }
+      } catch {
+        // Permission might be requested during start()
+      }
+
+      // 2. Filter out front-facing cameras
+      const backDevices = devices.filter(d => 
+        !/front|user|selfie|delanteria|delantera/i.test(d.label)
+      );
+
+      // 3. Select best back camera: prefer Back Facing 0 or label with "0" or "back"
+      let targetCameraId: string | null = null;
+      const back0 = backDevices.find(d =>
+        /back.*0|rear.*0|traseira.*0|trasera.*0/i.test(d.label) ||
+        (d.label.toLowerCase().includes('back') && d.label.includes('0')) ||
+        d.id === '0'
+      );
+
+      if (back0) {
+        targetCameraId = back0.id;
+      } else if (backDevices.length > 0) {
+        targetCameraId = backDevices[0].id;
+      }
+
+      let started = false;
+      let lastErr: any = null;
+
+      // Try targetCameraId first
+      if (targetCameraId) {
+        try {
+          await scannerInstance.start(
+            targetCameraId,
+            config,
+            (decodedText) => handleProcessCode(decodedText),
+            () => {}
+          );
+          started = true;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      // If not started, try all other back cameras
+      if (!started && backDevices.length > 0) {
+        for (const cam of backDevices) {
+          if (cam.id === targetCameraId) continue;
+          try {
+            await scannerInstance.start(
+              cam.id,
+              config,
+              (decodedText) => handleProcessCode(decodedText),
+              () => {}
+            );
+            started = true;
+            break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+      }
+
+      // If still not started, fallback to environment facingMode
+      if (!started) {
+        try {
+          await scannerInstance.start(
+            { facingMode: 'environment' },
+            config,
+            (decodedText) => handleProcessCode(decodedText),
+            () => {}
+          );
+          started = true;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      if (!started) {
+        throw lastErr || new Error('No se pudo iniciar la cámara trasera.');
       }
 
       setScanning(true);
@@ -188,7 +243,7 @@ export const PorteriaView: React.FC<Props> = ({
         err?.message ||
           (lang === 'de'
             ? 'Kamera konnte nicht gestartet werden. Bitte Berechtigungen prüfen.'
-            : 'No se pudo iniciar la cámara. Verifica los permisos del navegador o selecciona otra cámara.')
+            : 'No se pudo iniciar la cámara. Verifica los permisos del navegador.')
       );
       setScanning(false);
     } finally {
@@ -329,20 +384,6 @@ export const PorteriaView: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-            {cameras.length > 1 && !scanning && (
-              <select
-                value={selectedCameraId}
-                onChange={(e) => setSelectedCameraId(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 text-xs text-gray-800 focus:outline-none focus:border-red-600"
-              >
-                {cameras.map((cam) => (
-                  <option key={cam.id} value={cam.id}>
-                    {cam.label || `Cámara ${cam.id.slice(0, 5)}`}
-                  </option>
-                ))}
-              </select>
-            )}
-
             {!scanning ? (
               <button
                 onClick={startScanner}

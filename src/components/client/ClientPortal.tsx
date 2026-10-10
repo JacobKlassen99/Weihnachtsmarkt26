@@ -202,12 +202,12 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
   };
 
   const handleCreateInvitation = async () => {
-    const alquilerId = personaId || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID || activeToken;
+    const alquilerId = personaId || localStorage.getItem('wm_client_alquiler_id') || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID;
     if (!alquilerId) return;
     setCreatingInvite(true);
     setInviteError(null);
     try {
-      const secreto = getOrCreateSecretoDispositivo(String(alquilerId));
+      const secreto = localStorage.getItem('wm_client_secreto') || getOrCreateSecretoDispositivo(String(alquilerId));
       const res = await backendService.crearInvitacion(String(alquilerId), secreto);
       if (!res.ok) {
         setInviteError(res.error || res.mensaje || (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'No se pudo generar la invitación'));

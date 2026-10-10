@@ -311,8 +311,6 @@ class BackendService {
     const res = await this.postRequest<{ ok: boolean; token_invitacion?: string; error?: string; [key: string]: any }>({
       action: 'crearInvitacion',
       AlquilerID: String(alquilerId).trim(),
-      PersonaID: String(alquilerId).trim(),
-      PersonaTipo: 'CLIENTE',
       SecretoDispositivo: secretoDispositivo,
       nombre: nombreSugerido,
     });

@@ -41,13 +41,13 @@ export interface SlotCoord {
 export const REFERENCE_SLOTS: SlotCoord[] = (() => {
   const slots: SlotCoord[] = [];
   const width = 38;
-  const height = 36;
-  const startY = 126;
-  const endY = 786;
-  const totalSlotsPerCol = 17;
-  const stepY = (endY - startY) / (totalSlotsPerCol - 1); // 41.25px step
+  const height = 30;
+  const startY = 115;
+  const endY = 865;
+  const totalSlotsPerCol = 20;
+  const stepY = (endY - startY) / (totalSlotsPerCol - 1);
 
-  // Left column: 1 to 17
+  // Left column: 1 to 20
   const leftX = 162;
   for (let i = 0; i < totalSlotsPerCol; i++) {
     slots.push({
@@ -60,11 +60,11 @@ export const REFERENCE_SLOTS: SlotCoord[] = (() => {
     });
   }
 
-  // Right column: 18 to 34
+  // Right column: 21 to 40
   const rightX = 642;
   for (let i = 0; i < totalSlotsPerCol; i++) {
     slots.push({
-      numero: 18 + i,
+      numero: 21 + i,
       col: 'right',
       x: rightX,
       y: Math.round(startY + i * stepY),
@@ -355,7 +355,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
           <div className="flex items-center gap-1 text-[11px] text-gray-500">
             <Info className="w-3.5 h-3.5 text-gray-400" />
-            <span>34 espacios de referencia</span>
+            <span>40 espacios de referencia</span>
           </div>
         </div>
       </div>
@@ -395,7 +395,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           </span>
           <span className="text-gray-400">|</span>
           <span className="text-[11px] text-gray-500">
-            Izq: 1-17 · Der: 18-34
+            Izq: 1-20 · Der: 21-40
           </span>
         </div>
 
@@ -596,7 +596,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 fill="#374151"
                 letterSpacing="1"
               >
-                STANDS 1 - 17
+                STANDS 1 - 20
               </text>
               <text
                 x="661"
@@ -607,10 +607,10 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                 fill="#374151"
                 letterSpacing="1"
               >
-                STANDS 18 - 34
+                STANDS 21 - 40
               </text>
 
-              {/* 8. RENDER THE 34 SLOTS (Stands 1 to 34) */}
+              {/* 8. RENDER THE 40 SLOTS (Stands 1 to 40) */}
               {REFERENCE_SLOTS.map((slot) => {
                 const stand = standsByNumber.get(slot.numero);
                 const hasRealRecord = Boolean(stand);

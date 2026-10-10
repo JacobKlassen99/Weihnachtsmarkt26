@@ -306,24 +306,16 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 py-8 px-4 text-center text-xs text-gray-500 mb-14 md:mb-0">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-red-700" />
-            <span className="font-bold text-gray-900">
-              {publicData.configuracion?.NOMBRE_EVENTO || 'Weihnachtsmarkt'}
-            </span>
-            <span>•</span>
-            <span className="text-red-700 font-mono font-medium">
-              {publicData.configuracion?.GESTION_ACTIVA || 'GES-2026'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-[11px] text-gray-500">
-            <span>PWA Oficial • Google Sheets Backend</span>
-            <span>•</span>
-            <span>Netlify Ready</span>
-          </div>
+      <footer className="bg-white border-t border-gray-200 py-6 px-4 text-center text-xs text-gray-500 mb-14 md:mb-0">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
+          <Sparkles className="w-4 h-4 text-red-700" />
+          <span className="font-bold text-gray-900">
+            {publicData.configuracion?.NOMBRE_EVENTO || 'Weihnachtsmarkt'}
+          </span>
+          <span>•</span>
+          <span className="text-red-700 font-mono font-medium">
+            {publicData.configuracion?.GESTION_ACTIVA || 'GES-2026'}
+          </span>
         </div>
       </footer>
 

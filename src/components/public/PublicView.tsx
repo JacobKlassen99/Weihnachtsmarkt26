@@ -141,7 +141,7 @@ export const PublicView: React.FC<Props> = ({
         .replace('{STAND}', formStandNumero)
         .replace('{CATEGORIA}', formCategory);
 
-      const cleanPhone = (config.WHATSAPP_ADMIN || '75593587').replace(/\D/g, '');
+      const cleanPhone = String(config.WHATSAPP_ADMIN || '75593587').replace(/\D/g, '');
       const defaultWhatsapp = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
         message
       )}`;

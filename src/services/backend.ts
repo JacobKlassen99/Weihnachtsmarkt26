@@ -428,7 +428,7 @@ class BackendService {
             const idVal = s.SolicitudID || s.solicitudID || s.id || s.ID || '';
             const standVal = s.NumeroStand || s.numeroStand || s.stand || s.Stand || '';
             const nomVal = s.NombreCompleto || s.nombreCompleto || s.nombre || s.Nombre || '';
-            const telVal = s.Telefono || s.telefono || s.phone || '';
+            const telVal = String(s.Telefono ?? s.telefono ?? s.phone ?? '');
             const fechaVal = s.FechaSolicitud || s.fechaSolicitud || s.fecha || s.Fecha || '';
             const estadoVal = String(s.Estado || s.estado || 'pendiente').toLowerCase();
             const catVal = s.Categoria || s.categoria || 'Comida';
@@ -456,7 +456,7 @@ class BackendService {
             const idVal = a.AlquilerID || a.alquilerID || a.id || a.ID || '';
             const standVal = a.NumeroStand || a.numeroStand || a.stand || a.Stand || '';
             const clienteVal = a.Cliente || a.cliente || a.NombreCompleto || a.nombreCompleto || '';
-            const telVal = a.Telefono || a.telefono || '';
+            const telVal = String(a.Telefono ?? a.telefono ?? '');
             const tokenVal = a.TokenCliente || a.tokenCliente || a.token_cliente || '';
             const fechaVal = a.FechaAlquiler || a.fechaAlquiler || a.fecha_alquiler || a.fecha || '';
             const estadoVal = String(a.Estado || a.estado || 'activo').toLowerCase();

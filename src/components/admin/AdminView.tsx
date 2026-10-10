@@ -1220,7 +1220,7 @@ export const AdminView: React.FC<Props> = ({
                     <tr key={sol.id} className="hover:bg-gray-50/80 transition">
                       <td className="p-3 font-mono font-bold text-red-700">#{sol.stand}</td>
                       <td className="p-3 font-semibold text-gray-900">{sol.nombre}</td>
-                      <td className="p-3 font-mono">{sol.telefono}</td>
+                      <td className="p-3 font-mono">{sol.telefono ? String(sol.telefono) : '-'}</td>
                       <td className="p-3 text-gray-500">{sol.fecha || '-'}</td>
                       <td className="p-3">
                         <span
@@ -1239,7 +1239,7 @@ export const AdminView: React.FC<Props> = ({
                         {sol.estado === 'pendiente' ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <a
-                              href={`https://wa.me/${sol.telefono.replace(/\D/g, '')}`}
+                              href={`https://wa.me/${String(sol.telefono || '').replace(/\D/g, '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-1.5 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition shadow-xs"
@@ -1310,7 +1310,7 @@ export const AdminView: React.FC<Props> = ({
                     <tr key={alq.id} className="hover:bg-gray-50/80 transition">
                       <td className="p-3 font-mono font-bold text-red-700">#{alq.stand}</td>
                       <td className="p-3 font-semibold text-gray-900">{alq.cliente}</td>
-                      <td className="p-3 font-mono">{alq.telefono}</td>
+                      <td className="p-3 font-mono">{alq.telefono ? String(alq.telefono) : '-'}</td>
                       <td className="p-3 text-gray-500">{alq.fecha_alquiler || '-'}</td>
                       <td className="p-3">
                         <span

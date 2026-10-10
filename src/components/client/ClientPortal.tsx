@@ -44,12 +44,10 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
     setError(null);
     try {
       let alquilerId = localStorage.getItem('wm_client_alquiler_id') || '';
-      if (!alquilerId && !shouldActivate) {
-        alquilerId = tokenOrId;
-      }
-      const secreto = getOrCreateSecretoDispositivo(alquilerId || tokenOrId);
+      let secreto = localStorage.getItem('wm_client_secreto') || '';
 
       if (shouldActivate) {
+        secreto = getOrCreateSecretoDispositivo(tokenOrId);
         try {
           const actRes = await backendService.activarCliente(tokenOrId, secreto);
           if (actRes && !actRes.ok) {
@@ -59,41 +57,48 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                 ? 'Dieser Zugang wurde bereits auf einem anderen Gerät aktiviert. Bitte wenden Sie sich an den Administrator zum Zurücksetzen.'
                 : 'Este acceso ya fue activado en otro dispositivo o teléfono. Contacta al administrador para restablecer el acceso si necesitas cambiar de teléfono.');
             }
+            throw new Error(errStr || 'Error al activar el cliente');
           }
           if (actRes && actRes.ok) {
             alquilerId = actRes.AlquilerID || actRes.alquiler_id || actRes.id || actRes.data?.AlquilerID || actRes.data?.id || '';
           }
         } catch (actErr: any) {
-          const errStr = actErr.message || '';
-          if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
-            throw actErr;
-          }
+          throw actErr;
         }
       }
 
+      if (!alquilerId && !shouldActivate) {
+        alquilerId = tokenOrId;
+      }
+      if (!secreto) {
+        secreto = getOrCreateSecretoDispositivo(alquilerId || tokenOrId);
+      }
+
       let data: MiAlquilerData;
-      if (alquilerId) {
-        try {
-          data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
-        } catch {
-          data = await backendService.getMiAlquiler(tokenOrId);
-        }
+      if (alquilerId && !shouldActivate) {
+        data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
+      } else if (shouldActivate) {
+        const targetId = alquilerId || tokenOrId;
+        const permanentSecreto = getOrCreateSecretoDispositivo(targetId);
+        secreto = permanentSecreto;
+        alquilerId = targetId;
+        data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
       } else {
         data = await backendService.getMiAlquiler(tokenOrId);
         alquilerId = data.alquiler?.AlquilerID || data.alquiler?.id || tokenOrId;
+        secreto = getOrCreateSecretoDispositivo(alquilerId);
       }
 
       const currentPersonaId = alquilerId || data.alquiler?.AlquilerID || data.alquiler?.id || tokenOrId;
       setPersonaId(String(currentPersonaId));
       setActiveToken(tokenOrId);
 
-      // Save locally for subsequent opens: only AlquilerID
+      // Save both AlquilerID and SecretoDispositivo persistently together in local storage
       localStorage.setItem('wm_client_alquiler_id', String(currentPersonaId));
-
-      const finalSecreto = getOrCreateSecretoDispositivo(String(currentPersonaId));
+      localStorage.setItem('wm_client_secreto', secreto);
 
       try {
-        const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), finalSecreto);
+        const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto);
         if (qrRes && qrRes.ok) {
           data.qr_acceso = qrRes.qr_acceso || qrRes.QR || undefined;
         } else {
@@ -113,12 +118,13 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
 
   useEffect(() => {
     const storedAlquilerId = localStorage.getItem('wm_client_alquiler_id');
+    const storedSecreto = localStorage.getItem('wm_client_secreto');
 
     if (initialToken) {
       setTokenInput(initialToken);
       setActiveToken(initialToken);
       fetchRental(initialToken, true); // First time activation with token
-    } else if (storedAlquilerId) {
+    } else if (storedAlquilerId && storedSecreto) {
       setActiveToken(storedAlquilerId);
       fetchRental(storedAlquilerId, false); // Subsequent open: direct fetch via miAlquilerDispositivo, NO activation
     }
@@ -231,9 +237,18 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
           <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">
             {t.accessPortal}
           </h3>
-          <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+          <p className="text-xs text-gray-500 mb-4 leading-relaxed">
             {t.enterTokenInstructions}
           </p>
+
+          <div className="p-3 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed text-left">
+            <span className="font-bold block mb-1">
+              {lang === 'de' ? 'Hinweis zur PWA-Nutzung:' : 'Nota sobre el uso de la PWA:'}
+            </span>
+            {lang === 'de'
+              ? 'Wenn Sie den WhatsApp-Link im Browser geöffnet haben, wurde der Zugang dort gespeichert. Installierte PWAs haben einen separaten Speicher. Sie können Ihren Aktivierungscode hier direkt eingeben, um ihn in dieser App zu aktivieren.'
+              : 'Si abriste el enlace de WhatsApp en el navegador del celular pero utilizas la PWA instalada, recuerda que tienen almacenamiento separado. Puedes ingresar tu código de activación aquí para activarlo directamente en esta aplicación.'}
+          </div>
 
           {error && (
             <div className="p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
@@ -261,7 +276,7 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                   <span>{t.loading}</span>
                 </>
               ) : (
-                <span>{t.accessPortal}</span>
+                <span>{lang === 'de' ? 'Aktivierungscode eingeben' : 'Ingresar código de activación'}</span>
               )}
             </button>
           </form>
@@ -323,7 +338,7 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
 
               <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
                 <button
-                  onClick={() => fetchRental(activeToken)}
+                  onClick={() => fetchRental(personaId || activeToken, false)}
                   disabled={loading}
                   className="flex items-center gap-1.5 text-gray-700 hover:text-red-700 font-medium"
                 >

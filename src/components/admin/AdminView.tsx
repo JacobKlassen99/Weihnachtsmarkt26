@@ -8,6 +8,7 @@ import {
   Copy,
   DollarSign,
   Edit2,
+  Flame,
   Gamepad2,
   Gift,
   KeyRound,
@@ -300,11 +301,21 @@ export const AdminView: React.FC<Props> = ({
 
     setSavingStand(true);
     try {
+      const rawParrilla = editingStand.TieneParrilla !== undefined
+        ? editingStand.TieneParrilla
+        : editingStand.tiene_parrilla;
+      const isComida = (editingStand.Categoria || editingStand.categoria || 'Comida') === 'Comida';
+      const tieneParrillaStr = isComida
+        ? (rawParrilla === 'SI' || rawParrilla === true ? 'SI' : 'NO')
+        : 'NO';
+
       const standToSave: Partial<Stand> = {
         StandID: standId || undefined,
         Numero: standNum,
         Nombre: editingStand.Nombre || editingStand.nombre || `Stand ${standNum}`,
         Categoria: (editingStand.Categoria || editingStand.categoria || 'Comida') as CategoriaStand,
+        TieneParrilla: tieneParrillaStr,
+        tiene_parrilla: tieneParrillaStr === 'SI',
         Precio: precioVal,
         Estado: editingStand.Estado || editingStand.estado || 'disponible',
         PosicionX: Number(editingStand.PosicionX ?? editingStand.posicion_x ?? 0),
@@ -1305,6 +1316,8 @@ export const AdminView: React.FC<Props> = ({
                   numero: '',
                   nombre: '',
                   categoria: 'Comida',
+                  TieneParrilla: 'NO',
+                  tiene_parrilla: false,
                   precio: '100',
                   estado: 'disponible',
                   descripcion: '',
@@ -1332,61 +1345,83 @@ export const AdminView: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {adminData.stands.map((stand) => (
-                    <tr key={stand.id || stand.numero} className="hover:bg-gray-50/80 transition">
-                      <td className="p-3 font-bold font-mono text-gray-900">#{stand.numero}</td>
-                      <td className="p-3">{stand.categoria}</td>
-                      <td className="p-3 font-mono font-medium">
-                        {stand.precio} {adminData.configuracion?.MONEDA || '$us'}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            stand.estado === 'disponible'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : 'bg-gray-100 text-gray-600 border border-gray-200'
-                          }`}
-                        >
-                          {stand.estado}
-                        </span>
-                      </td>
-                      <td className="p-3 max-w-xs truncate text-gray-500">
-                        {stand.descripcion || '-'}
-                      </td>
-                      <td className="p-3 text-right">
-                        <button
-                          onClick={() => {
-                            setStandModalError(null);
-                            setEditingStand({
-                              ...stand,
-                              StandID: stand.StandID || stand.id,
-                              numero: stand.Numero !== undefined ? stand.Numero : (stand.numero ?? ''),
-                              Numero: stand.Numero !== undefined ? stand.Numero : (stand.numero ?? ''),
-                              nombre: stand.Nombre || stand.nombre || '',
-                              Nombre: stand.Nombre || stand.nombre || '',
-                              categoria: stand.Categoria || stand.categoria || 'Comida',
-                              Categoria: stand.Categoria || stand.categoria || 'Comida',
-                              precio: stand.Precio !== undefined ? stand.Precio : (stand.precio ?? 100),
-                              Precio: stand.Precio !== undefined ? stand.Precio : (stand.precio ?? 100),
-                              estado: String(stand.Estado || stand.estado || 'disponible').toLowerCase(),
-                              Estado: String(stand.Estado || stand.estado || 'DISPONIBLE').toUpperCase(),
-                              descripcion: stand.Descripcion || stand.descripcion || '',
-                              Descripcion: stand.Descripcion || stand.descripcion || '',
-                              PosicionX: stand.PosicionX !== undefined ? stand.PosicionX : (stand.posicion_x ?? 0),
-                              PosicionY: stand.PosicionY !== undefined ? stand.PosicionY : (stand.posicion_y ?? 0),
-                              Ancho: stand.Ancho !== undefined ? stand.Ancho : (stand.ancho ?? 1),
-                              Alto: stand.Alto !== undefined ? stand.Alto : (stand.alto ?? 1),
-                            });
-                            setStandModalOpen(true);
-                          }}
-                          className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs"
-                          title={t.edit}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
+                  {adminData.stands.map((stand) => {
+                    const isComida = (stand.categoria || '').toLowerCase() === 'comida';
+                    const hasParrilla = String(stand.TieneParrilla).toUpperCase() === 'SI' || stand.tiene_parrilla === true;
+
+                    return (
+                      <tr key={stand.id || stand.numero} className="hover:bg-gray-50/80 transition">
+                        <td className="p-3 font-bold font-mono text-gray-900">#{stand.numero}</td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold">{stand.categoria}</span>
+                            {isComida && (
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  hasParrilla
+                                    ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                                    : 'bg-sky-100 text-sky-800 border border-sky-200'
+                                }`}
+                              >
+                                {hasParrilla ? 'Con parrilla' : 'Sin parrilla'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono font-medium">
+                          {stand.precio} {adminData.configuracion?.MONEDA || '$us'}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              stand.estado === 'disponible'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                            }`}
+                          >
+                            {stand.estado}
+                          </span>
+                        </td>
+                        <td className="p-3 max-w-xs truncate text-gray-500">
+                          {stand.descripcion || '-'}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => {
+                              setStandModalError(null);
+                              setEditingStand({
+                                ...stand,
+                                StandID: stand.StandID || stand.id,
+                                numero: stand.Numero !== undefined ? stand.Numero : (stand.numero ?? ''),
+                                Numero: stand.Numero !== undefined ? stand.Numero : (stand.numero ?? ''),
+                                nombre: stand.Nombre || stand.nombre || '',
+                                Nombre: stand.Nombre || stand.nombre || '',
+                                categoria: stand.Categoria || stand.categoria || 'Comida',
+                                Categoria: stand.Categoria || stand.categoria || 'Comida',
+                                TieneParrilla: hasParrilla ? 'SI' : 'NO',
+                                tiene_parrilla: hasParrilla,
+                                precio: stand.Precio !== undefined ? stand.Precio : (stand.precio ?? 100),
+                                Precio: stand.Precio !== undefined ? stand.Precio : (stand.precio ?? 100),
+                                estado: String(stand.Estado || stand.estado || 'disponible').toLowerCase(),
+                                Estado: String(stand.Estado || stand.estado || 'DISPONIBLE').toUpperCase(),
+                                descripcion: stand.Descripcion || stand.descripcion || '',
+                                Descripcion: stand.Descripcion || stand.descripcion || '',
+                                PosicionX: stand.PosicionX !== undefined ? stand.PosicionX : (stand.posicion_x ?? 0),
+                                PosicionY: stand.PosicionY !== undefined ? stand.PosicionY : (stand.posicion_y ?? 0),
+                                Ancho: stand.Ancho !== undefined ? stand.Ancho : (stand.ancho ?? 1),
+                                Alto: stand.Alto !== undefined ? stand.Alto : (stand.alto ?? 1),
+                              });
+                              setStandModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs"
+                            title={t.edit}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                   {adminData.stands.length === 0 && (
                     <tr>
                       <td colSpan={6} className="p-8 text-center text-gray-500">
@@ -2075,6 +2110,54 @@ export const AdminView: React.FC<Props> = ({
                   })}
                 </div>
               </div>
+
+              {/* Grill modality when category is Comida */}
+              {editingStand.categoria === 'Comida' && (
+                <div className="p-3 rounded-xl bg-orange-50/70 border border-orange-200 space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-800">
+                    {lang === 'de' ? 'Grill vorhanden?' : '¿Cuenta con parrilla?'}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingStand({
+                          ...editingStand,
+                          TieneParrilla: 'SI',
+                          tiene_parrilla: true,
+                        })
+                      }
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                        String(editingStand.TieneParrilla).toUpperCase() === 'SI' || editingStand.tiene_parrilla === true
+                          ? 'bg-orange-600 text-white border-orange-700 shadow-xs'
+                          : 'bg-white hover:bg-orange-50 text-gray-700 border-gray-300'
+                      }`}
+                    >
+                      <Flame className="w-3.5 h-3.5" />
+                      <span>{lang === 'de' ? 'Mit Grill' : 'Sí, con parrilla'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingStand({
+                          ...editingStand,
+                          TieneParrilla: 'NO',
+                          tiene_parrilla: false,
+                        })
+                      }
+                      className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                        String(editingStand.TieneParrilla).toUpperCase() !== 'SI' && editingStand.tiene_parrilla !== true
+                          ? 'bg-sky-600 text-white border-sky-700 shadow-xs'
+                          : 'bg-white hover:bg-sky-50 text-gray-700 border-gray-300'
+                      }`}
+                    >
+                      <UtensilsCrossed className="w-3.5 h-3.5" />
+                      <span>{lang === 'de' ? 'Ohne Grill' : 'No, sin parrilla'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">

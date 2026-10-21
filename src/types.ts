@@ -37,6 +37,9 @@ export interface Stand {
   Ancho?: number;
   alto?: number;
   Alto?: number;
+  tiene_parrilla?: boolean | string;
+  TieneParrilla?: boolean | string;
+  modalidad?: 'con_parrilla' | 'sin_parrilla' | string;
   descripcion?: string;
   Descripcion?: string;
   cliente_nombre?: string;
@@ -51,6 +54,10 @@ export interface Solicitud {
   telefono: string;
   observacion?: string;
   Observacion?: string;
+  tiene_parrilla?: boolean | string;
+  TieneParrilla?: boolean | string;
+  modalidad?: string;
+  Modalidad?: string;
   fecha: string;
   estado: 'pendiente' | 'confirmada' | 'rechazada' | string;
   gestion?: string;
@@ -58,6 +65,7 @@ export interface Solicitud {
 
 export interface Alquiler {
   id: string;
+  AlquilerID?: string;
   stand: string | number;
   cliente: string;
   telefono: string;
@@ -153,6 +161,10 @@ export interface MiAlquilerData {
 
 export interface InvitacionInfo {
   valida: boolean;
+  id?: string;
+  invitado_id?: string;
+  InvitadoID?: string;
+  Invitado_ID?: string;
   stand?: string | number;
   cliente?: string;
   categoria?: string;

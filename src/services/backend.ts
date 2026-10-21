@@ -171,31 +171,44 @@ class BackendService {
           'Hallo, ich bin {NOMBRE}. Ich habe Stand {STAND} in der Kategorie {CATEGORIA} für den Weihnachtsmarkt angefragt.',
       },
       stands: Array.isArray(result.data?.stands)
-        ? result.data.stands.map((s: any) => ({
-            ...s,
-            id: s.StandID || s.id || '',
-            StandID: s.StandID || s.id || '',
-            numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
-            Numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
-            nombre: s.Nombre || s.nombre || '',
-            Nombre: s.Nombre || s.nombre || '',
-            categoria: s.Categoria || s.categoria || 'Comida',
-            Categoria: s.Categoria || s.categoria || 'Comida',
-            precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
-            Precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
-            estado: String(s.Estado || s.estado || 'disponible').toLowerCase(),
-            Estado: String(s.Estado || s.estado || 'DISPONIBLE').toUpperCase(),
-            posicion_x: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
-            PosicionX: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
-            posicion_y: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
-            PosicionY: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
-            ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
-            Ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
-            alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
-            Alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
-            descripcion: s.Descripcion || s.descripcion || '',
-            Descripcion: s.Descripcion || s.descripcion || '',
-          }))
+        ? result.data.stands.map((s: any) => {
+            const rawParrilla = s.TieneParrilla !== undefined ? s.TieneParrilla : (s.tiene_parrilla !== undefined ? s.tiene_parrilla : s.parrilla);
+            const numVal = Number(s.Numero !== undefined ? s.Numero : s.numero);
+            // Canonical blueprint grill stands: 6, 8, 11, 14, 15
+            const defaultGrill = [6, 8, 11, 14, 15].includes(numVal);
+            const hasParrilla = rawParrilla !== undefined && rawParrilla !== ''
+              ? String(rawParrilla).trim().toUpperCase() === 'SI' || String(rawParrilla).trim().toUpperCase() === 'TRUE' || rawParrilla === true
+              : defaultGrill;
+
+            return {
+              ...s,
+              id: s.StandID || s.id || '',
+              StandID: s.StandID || s.id || '',
+              numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
+              Numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
+              nombre: s.Nombre || s.nombre || '',
+              Nombre: s.Nombre || s.nombre || '',
+              categoria: s.Categoria || s.categoria || 'Comida',
+              Categoria: s.Categoria || s.categoria || 'Comida',
+              tiene_parrilla: hasParrilla,
+              TieneParrilla: hasParrilla ? 'SI' : 'NO',
+              modalidad: hasParrilla ? 'con_parrilla' : 'sin_parrilla',
+              precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
+              Precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
+              estado: String(s.Estado || s.estado || 'disponible').toLowerCase(),
+              Estado: String(s.Estado || s.estado || 'DISPONIBLE').toUpperCase(),
+              posicion_x: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
+              PosicionX: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
+              posicion_y: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
+              PosicionY: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
+              ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
+              Ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
+              alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
+              Alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
+              descripcion: s.Descripcion || s.descripcion || '',
+              Descripcion: s.Descripcion || s.descripcion || '',
+            };
+          })
         : [],
     };
 
@@ -211,8 +224,15 @@ class BackendService {
     nombre: string;
     telefono: string;
     observacion?: string;
+    tieneParrilla?: boolean | string;
+    modalidad?: string;
     idioma?: string;
   }): Promise<{ ok: boolean; error?: string; mensaje?: string; whatsapp_url?: string; [key: string]: any }> {
+    const rawP = params.tieneParrilla;
+    const tieneParrillaStr = rawP !== undefined
+      ? (String(rawP).toUpperCase() === 'SI' || rawP === true ? 'SI' : 'NO')
+      : undefined;
+
     const payload: Record<string, unknown> = {
       action: 'solicitud',
       StandID: params.standId ? String(params.standId).trim() : undefined,
@@ -222,6 +242,11 @@ class BackendService {
       Idioma: String(params.idioma || 'es').trim(),
       stand: params.stand,
       categoria: params.categoria,
+      Categoria: params.categoria,
+      TieneParrilla: tieneParrillaStr,
+      tiene_parrilla: tieneParrillaStr,
+      modalidad: params.modalidad || (tieneParrillaStr === 'SI' ? 'con_parrilla' : 'sin_parrilla'),
+      Modalidad: params.modalidad || (tieneParrillaStr === 'SI' ? 'con_parrilla' : 'sin_parrilla'),
       nombre: String(params.nombre || '').trim(),
       telefono: String(params.telefono || '').trim(),
       observacion: String(params.observacion || '').trim(),
@@ -484,31 +509,43 @@ class BackendService {
     const adminData: AdminData = {
       configuracion: res.data?.configuracion || {},
       stands: Array.isArray(res.data?.stands)
-        ? res.data.stands.map((s: any) => ({
-            ...s,
-            id: s.StandID || s.id || '',
-            StandID: s.StandID || s.id || '',
-            numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
-            Numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
-            nombre: s.Nombre || s.nombre || '',
-            Nombre: s.Nombre || s.nombre || '',
-            categoria: s.Categoria || s.categoria || 'Comida',
-            Categoria: s.Categoria || s.categoria || 'Comida',
-            precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
-            Precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
-            estado: String(s.Estado || s.estado || 'disponible').toLowerCase(),
-            Estado: String(s.Estado || s.estado || 'DISPONIBLE').toUpperCase(),
-            posicion_x: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
-            PosicionX: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
-            posicion_y: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
-            PosicionY: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
-            ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
-            Ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
-            alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
-            Alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
-            descripcion: s.Descripcion || s.descripcion || '',
-            Descripcion: s.Descripcion || s.descripcion || '',
-          }))
+        ? res.data.stands.map((s: any) => {
+            const rawParrilla = s.TieneParrilla !== undefined ? s.TieneParrilla : (s.tiene_parrilla !== undefined ? s.tiene_parrilla : s.parrilla);
+            const numVal = Number(s.Numero !== undefined ? s.Numero : s.numero);
+            const defaultGrill = [6, 8, 11, 14, 15].includes(numVal);
+            const hasParrilla = rawParrilla !== undefined && rawParrilla !== ''
+              ? String(rawParrilla).trim().toUpperCase() === 'SI' || String(rawParrilla).trim().toUpperCase() === 'TRUE' || rawParrilla === true
+              : defaultGrill;
+
+            return {
+              ...s,
+              id: s.StandID || s.id || '',
+              StandID: s.StandID || s.id || '',
+              numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
+              Numero: s.Numero !== undefined ? s.Numero : (s.numero ?? ''),
+              nombre: s.Nombre || s.nombre || '',
+              Nombre: s.Nombre || s.nombre || '',
+              categoria: s.Categoria || s.categoria || 'Comida',
+              Categoria: s.Categoria || s.categoria || 'Comida',
+              tiene_parrilla: hasParrilla,
+              TieneParrilla: hasParrilla ? 'SI' : 'NO',
+              modalidad: hasParrilla ? 'con_parrilla' : 'sin_parrilla',
+              precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
+              Precio: s.Precio !== undefined ? s.Precio : (s.precio ?? 0),
+              estado: String(s.Estado || s.estado || 'disponible').toLowerCase(),
+              Estado: String(s.Estado || s.estado || 'DISPONIBLE').toUpperCase(),
+              posicion_x: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
+              PosicionX: Number(s.PosicionX !== undefined ? s.PosicionX : (s.posicion_x ?? 0)),
+              posicion_y: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
+              PosicionY: Number(s.PosicionY !== undefined ? s.PosicionY : (s.posicion_y ?? 0)),
+              ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
+              Ancho: Number(s.Ancho !== undefined ? s.Ancho : (s.ancho ?? 1)),
+              alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
+              Alto: Number(s.Alto !== undefined ? s.Alto : (s.alto ?? 1)),
+              descripcion: s.Descripcion || s.descripcion || '',
+              Descripcion: s.Descripcion || s.descripcion || '',
+            };
+          })
         : [],
       solicitudes: Array.isArray(res.data?.solicitudes)
         ? res.data.solicitudes.map((s: any) => {
@@ -701,12 +738,23 @@ class BackendService {
     const anchoNum = Number(stand.Ancho !== undefined ? stand.Ancho : (stand.ancho ?? 1)) || 1;
     const altoNum = Number(stand.Alto !== undefined ? stand.Alto : (stand.alto ?? 1)) || 1;
 
+    const rawParrilla = stand.TieneParrilla !== undefined
+      ? stand.TieneParrilla
+      : (stand.tiene_parrilla !== undefined ? stand.tiene_parrilla : undefined);
+
+    let tieneParrillaStr = 'NO';
+    if (rawParrilla !== undefined) {
+      tieneParrillaStr = String(rawParrilla).toUpperCase() === 'SI' || rawParrilla === true ? 'SI' : 'NO';
+    }
+
     const payload: Record<string, unknown> = {
       action: 'saveStand',
       token,
       Numero: numClean,
       Nombre: standName,
       Categoria: cat,
+      TieneParrilla: tieneParrillaStr,
+      tiene_parrilla: tieneParrillaStr,
       Precio: precioNum,
       Estado: est,
       PosicionX: posX,
@@ -800,37 +848,6 @@ class BackendService {
       this.invalidateCache();
     }
 
-    return res;
-  }
-
-  // ACCESO ALQUILER ADMIN
-  public async accesoAlquilerAdmin(
-    token: string,
-    alquilerId: string
-  ): Promise<{ ok: boolean; data?: any; error?: string; [key: string]: any }> {
-    const res = await this.postRequest<{ ok: boolean; data?: any; error?: string; [key: string]: any }>({
-      action: 'accesoAlquilerAdmin',
-      token,
-      AlquilerID: String(alquilerId).trim(),
-    });
-    return res;
-  }
-
-  // RESET DISPOSITIVO
-  public async resetDispositivo(
-    token: string,
-    personaTipo: string,
-    personaId: string
-  ): Promise<{ ok: boolean; error?: string; [key: string]: any }> {
-    const res = await this.postRequest<{ ok: boolean; error?: string; [key: string]: any }>({
-      action: 'resetDispositivo',
-      token,
-      PersonaTipo: String(personaTipo).trim(),
-      PersonaID: String(personaId).trim(),
-    });
-    if (res.ok) {
-      this.invalidateCache('admin_data');
-    }
     return res;
   }
 

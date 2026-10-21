@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock,
   KeyRound,
-  QrCode,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
@@ -39,7 +38,8 @@ export const PorteriaView: React.FC<Props> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [backCameras, setBackCameras] = useState<Array<{ id: string; label: string; friendlyLabel: string }>>([]);
+  const [activeCamIndex, setActiveCamIndex] = useState<number>(0);
 
   const qrReaderRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<{ code: string; time: number } | null>(null);
@@ -96,6 +96,28 @@ export const PorteriaView: React.FC<Props> = ({
     }
     lastScannedCodeRef.current = { code: cleanCode, time: now };
 
+    // 1. Strict Client-side format & authenticity check (Reject bank QRs, arbitrary text, external URLs)
+    const isValidFormat =
+      cleanCode.includes('Weihnachtsmarkt') ||
+      cleanCode.includes('invitacion') ||
+      cleanCode.includes('cliente') ||
+      cleanCode.includes('INV-') ||
+      cleanCode.includes('CLI-') ||
+      cleanCode.includes('wm_') ||
+      cleanCode.includes('alquiler');
+
+    if (!isValidFormat) {
+      const invalidResult: ScanResult = {
+        ok: false,
+        error: 'QR NO VÁLIDO – No pertenece al Weihnachtsmarkt',
+        fecha_hora: new Date().toLocaleTimeString(),
+      };
+      setLastScanResult(invalidResult);
+      playSound(false);
+      setScanHistory((prev) => [invalidResult, ...prev.slice(0, 19)]);
+      return;
+    }
+
     if (!sessionToken) {
       setLastScanResult({
         ok: false,
@@ -107,17 +129,24 @@ export const PorteriaView: React.FC<Props> = ({
     setProcessing(true);
     try {
       const result = await backendService.scan(sessionToken, cleanCode);
-      setLastScanResult(result);
-      playSound(result.ok);
+      const verifiedResult: ScanResult = {
+        ...result,
+        ok: Boolean(result && result.ok && (result.nombre || result.stand || result.mensaje)),
+        error: result?.ok ? undefined : (result?.error || 'ACCESO DENEGADO'),
+        fecha_hora: new Date().toLocaleTimeString(),
+      };
+
+      setLastScanResult(verifiedResult);
+      playSound(verifiedResult.ok);
 
       setScanHistory((prev) => [
-        { ...result, fecha_hora: new Date().toLocaleTimeString() },
+        verifiedResult,
         ...prev.slice(0, 19),
       ]);
     } catch (err: any) {
       const errResult: ScanResult = {
         ok: false,
-        error: err.message || 'Error de conexión con el servidor',
+        error: 'NO SE PUDO VERIFICAR EL ACCESO: ' + (err.message || 'Error de conexión'),
         fecha_hora: new Date().toLocaleTimeString(),
       };
       setLastScanResult(errResult);
@@ -128,7 +157,7 @@ export const PorteriaView: React.FC<Props> = ({
     }
   };
 
-  const startScanner = async () => {
+  const startScanner = async (specificCameraId?: string) => {
     if (startingCamera || scanning) return;
     setStartingCamera(true);
     setCameraError(null);
@@ -162,7 +191,7 @@ export const PorteriaView: React.FC<Props> = ({
       }
 
       // 2. Filter out front-facing cameras completely
-      const backDevices = devices.filter(d => {
+      const backs = devices.filter(d => {
         const label = (d.label || '').toLowerCase();
         return !label.includes('front') && 
                !label.includes('user') && 
@@ -171,29 +200,27 @@ export const PorteriaView: React.FC<Props> = ({
                !label.includes('delantera');
       });
 
-      // 3. Prioritize "Back Facing 0" or camera 0 or back/rear
-      let targetCameraId: string | null = null;
-      const back0 = backDevices.find(d => {
-        const label = (d.label || '').toLowerCase();
-        return label.includes('back facing 0') || label.includes('back 0') || label.includes('back-0') || d.id === '0';
-      });
+      const formattedBacks = backs.map((d, index) => ({
+        id: d.id,
+        label: d.label,
+        friendlyLabel: `Cámara trasera ${index + 1}`
+      }));
+      setBackCameras(formattedBacks);
 
-      if (back0) {
-        targetCameraId = back0.id;
-      } else if (backDevices.length > 0) {
-        targetCameraId = backDevices[0].id;
-      } else if (devices.length > 0) {
-        targetCameraId = devices[0].id;
+      let targetId = specificCameraId;
+      if (!targetId && formattedBacks.length > 0) {
+        const idx = activeCamIndex < formattedBacks.length ? activeCamIndex : 0;
+        targetId = formattedBacks[idx].id;
       }
 
       let started = false;
       let lastErr: any = null;
 
-      // Try targetCameraId first
-      if (targetCameraId) {
+      // Try targetId first
+      if (targetId) {
         try {
           await scannerInstance.start(
-            targetCameraId,
+            targetId,
             config,
             (decodedText) => handleProcessCode(decodedText),
             () => {}
@@ -204,10 +231,10 @@ export const PorteriaView: React.FC<Props> = ({
         }
       }
 
-      // If not started, try all other back cameras
-      if (!started && backDevices.length > 0) {
-        for (const cam of backDevices) {
-          if (cam.id === targetCameraId) continue;
+      // If not started, try other back cameras
+      if (!started && formattedBacks.length > 0) {
+        for (const cam of formattedBacks) {
+          if (cam.id === targetId) continue;
           try {
             await scannerInstance.start(
               cam.id,
@@ -255,6 +282,14 @@ export const PorteriaView: React.FC<Props> = ({
     } finally {
       setStartingCamera(false);
     }
+  };
+
+  const switchCamera = async () => {
+    if (backCameras.length <= 1) return;
+    await stopScanner();
+    const nextIndex = (activeCamIndex + 1) % backCameras.length;
+    setActiveCamIndex(nextIndex);
+    await startScanner(backCameras[nextIndex].id);
   };
 
   const stopScanner = async () => {
@@ -370,7 +405,7 @@ export const PorteriaView: React.FC<Props> = ({
                   </div>
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-red-700 bg-white p-2.5 rounded-lg border border-red-200">
+                <p className="mt-2 text-xs text-red-700 bg-white p-2.5 rounded-lg border border-red-200 font-semibold">
                   {lastScanResult.error || 'Código QR no reconocido o inactivo'}
                 </p>
               )}
@@ -390,11 +425,22 @@ export const PorteriaView: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            {backCameras.length > 1 && scanning && (
+              <button
+                onClick={switchCamera}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Cambiar entre cámaras traseras disponibles"
+              >
+                <Camera className="w-4 h-4 text-red-700" />
+                <span>{`Cambiar cámara (${activeCamIndex + 1}/${backCameras.length})`}</span>
+              </button>
+            )}
+
             {!scanning ? (
               <button
-                onClick={startScanner}
+                onClick={() => startScanner()}
                 disabled={!sessionToken || startingCamera}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-xs transition active:scale-95 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {startingCamera ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -406,7 +452,7 @@ export const PorteriaView: React.FC<Props> = ({
             ) : (
               <button
                 onClick={stopScanner}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-bold text-xs shadow-xs transition active:scale-95"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
               >
                 <StopCircle className="w-4 h-4" />
                 <span>{t.stopCamera}</span>
@@ -422,8 +468,8 @@ export const PorteriaView: React.FC<Props> = ({
               <span>{cameraError}</span>
             </div>
             <button
-              onClick={startScanner}
-              className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shrink-0 transition shadow-xs"
+              onClick={() => startScanner()}
+              className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-xs shrink-0 transition shadow-xs cursor-pointer"
             >
               Reintentar cámara
             </button>
@@ -460,7 +506,7 @@ export const PorteriaView: React.FC<Props> = ({
             <button
               type="submit"
               disabled={!sessionToken || processing || !manualCode.trim()}
-              className="px-4 py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs transition active:scale-95 disabled:opacity-50 shadow-xs"
+              className="px-4 py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs transition active:scale-95 disabled:opacity-50 shadow-xs cursor-pointer"
             >
               {processing ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />

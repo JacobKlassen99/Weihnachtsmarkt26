@@ -183,6 +183,9 @@ export default function App() {
   };
 
   const handleNavigate = (view: NavView) => {
+    if (currentView === 'porteria' && view !== 'porteria') {
+      window.dispatchEvent(new CustomEvent('weihnachtsmarkt-stop-camera'));
+    }
     setCurrentView(view);
     if (view === 'public') window.location.hash = '#home';
     else if (view === 'client') window.location.hash = clientTokenParam ? `#cliente?token=${clientTokenParam}` : '#cliente';
@@ -209,6 +212,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    window.dispatchEvent(new CustomEvent('weihnachtsmarkt-stop-camera'));
     setSessionToken(null);
     setAdminUser(null);
     sessionStorage.removeItem('weihnachtsmarkt_admin_token');
@@ -288,6 +292,7 @@ export default function App() {
           {currentView === 'porteria' && (
             <PorteriaView
               sessionToken={sessionToken || undefined}
+              user={adminUser}
               lang={lang}
               onRequireLogin={() => handleNavigate('admin')}
             />

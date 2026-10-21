@@ -754,7 +754,7 @@ class BackendService {
       Nombre: standName,
       Categoria: cat,
       TieneParrilla: tieneParrillaStr,
-      tiene_parrilla: tieneParrillaStr,
+      tiene_parrilla: tieneParrillaStr === 'SI',
       Precio: precioNum,
       Estado: est,
       PosicionX: posX,
@@ -1025,16 +1025,104 @@ class BackendService {
 
   // 20. SCAN PORTERÍA
   public async scan(token: string, qr: string): Promise<ScanResult> {
-    const res = await this.postRequest<ScanResult>({
+    const cleanToken = String(token || '').trim();
+    const cleanQr = String(qr || '').trim();
+
+    const res = await this.postRequest<any>({
       action: 'scan',
-      token,
-      qr,
+      token: cleanToken,
+      SessionToken: cleanToken,
+      token_sesion: cleanToken,
+      qr: cleanQr,
+      QR: cleanQr,
+      qr_code: cleanQr,
+      codigo: cleanQr,
     });
 
-    // Invalidate access log cache
+    // Invalidate access log cache so recent scans list updates
     this.invalidateCache('admin_data');
 
-    return res;
+    // Robust normalization of Google Apps Script response
+    const rawData = (res && typeof res.data === 'object' && res.data !== null) ? res.data : {};
+    const rawRoot = (res || {}) as Record<string, any>;
+
+    const isExplicitAuthorized =
+      rawRoot.autorizado === true ||
+      rawData.autorizado === true ||
+      rawRoot.success === true ||
+      rawData.success === true;
+
+    const isExplicitDenied =
+      rawRoot.autorizado === false ||
+      rawData.autorizado === false ||
+      rawRoot.success === false ||
+      rawData.success === false;
+
+    const errorMsg = String(rawRoot.error || rawData.error || '').trim();
+    const motivoMsg = String(rawRoot.motivo || rawData.motivo || rawRoot.mensaje || rawData.mensaje || '').trim();
+
+    // Differentiate session/token authentication errors from QR denials
+    const isSessionOrAuthError = !rawRoot.ok && (
+      errorMsg.toLowerCase().includes('sesion') ||
+      errorMsg.toLowerCase().includes('sesión') ||
+      errorMsg.toLowerCase().includes('token') ||
+      errorMsg.toLowerCase().includes('no autorizado') ||
+      errorMsg.toLowerCase().includes('inicie sesión') ||
+      errorMsg.toLowerCase().includes('permiso')
+    );
+
+    let statusType: 'authorized' | 'denied' | 'error';
+    if (isSessionOrAuthError) {
+      statusType = 'error';
+    } else if (isExplicitAuthorized) {
+      statusType = 'authorized';
+    } else if (isExplicitDenied) {
+      statusType = 'denied';
+    } else if (rawRoot.ok && !errorMsg) {
+      statusType = 'authorized';
+    } else {
+      statusType = 'denied';
+    }
+
+    const nombre =
+      rawRoot.nombre ||
+      rawData.nombre ||
+      rawRoot.cliente ||
+      rawData.cliente ||
+      rawData.nombre_invitado ||
+      rawRoot.nombre_invitado ||
+      '';
+
+    const stand =
+      rawRoot.stand !== undefined
+        ? rawRoot.stand
+        : rawData.stand !== undefined
+        ? rawData.stand
+        : (rawRoot.stand_numero || rawData.stand_numero || '');
+
+    const tipo =
+      rawRoot.tipo ||
+      rawData.tipo ||
+      (rawData.nombre_invitado ? 'invitado' : (nombre ? 'cliente' : ''));
+
+    const mensaje = rawRoot.mensaje || rawData.mensaje;
+
+    return {
+      ok: statusType === 'authorized',
+      autorizado: statusType === 'authorized',
+      statusType,
+      nombre: nombre || (statusType === 'authorized' ? 'Acceso Autorizado' : undefined),
+      stand,
+      tipo,
+      mensaje,
+      motivo: motivoMsg || errorMsg || undefined,
+      error:
+        statusType !== 'authorized'
+          ? (motivoMsg || errorMsg || (statusType === 'denied' ? 'ACCESO DENEGADO' : 'ERROR DE VALIDACIÓN'))
+          : undefined,
+      fecha_hora: rawRoot.fecha_hora || rawData.fecha_hora || new Date().toLocaleTimeString(),
+      raw: res,
+    };
   }
 }
 

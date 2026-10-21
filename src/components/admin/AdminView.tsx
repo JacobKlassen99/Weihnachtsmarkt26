@@ -180,7 +180,7 @@ export const AdminView: React.FC<Props> = ({
   };
 
   // Load Admin Data
-  const loadAdminData = async (token: string, force = false) => {
+  const loadAdminData = async (token: string, force = false): Promise<AdminData | null> => {
     setLoadingData(true);
     setDataError(null);
     try {
@@ -189,12 +189,14 @@ export const AdminView: React.FC<Props> = ({
       if (data.configuracion) {
         setConfigForm(data.configuracion);
       }
+      return data;
     } catch (err: any) {
       if (err.message?.includes('Sesion expirada') || err.message?.includes('expirada')) {
         handleSessionExpired(err.message);
-        return;
+        return null;
       }
       setDataError(err.message || 'Error al cargar datos administrativos');
+      return null;
     } finally {
       setLoadingData(false);
     }
@@ -266,7 +268,8 @@ export const AdminView: React.FC<Props> = ({
       return;
     }
 
-    const standNum = String(editingStand.Numero || editingStand.numero || '').trim();
+    // Read values edited by user in form, preferring lower case user updates or falling back
+    const standNum = String(editingStand.numero !== undefined && editingStand.numero !== '' ? editingStand.numero : (editingStand.Numero || '')).trim();
     if (!standNum) {
       setStandModalError(lang === 'de' ? 'Standnummer ist erforderlich' : 'El número de stand es obligatorio');
       return;
@@ -277,7 +280,7 @@ export const AdminView: React.FC<Props> = ({
     if (
       adminData?.stands?.some(
         (s) =>
-          String(s.Numero || s.numero).trim() === standNum &&
+          String(s.numero !== undefined ? s.numero : s.Numero).trim() === standNum &&
           String(s.StandID || s.id || '') !== String(standId || '')
       )
     ) {
@@ -289,7 +292,8 @@ export const AdminView: React.FC<Props> = ({
       return;
     }
 
-    const precioVal = Number(editingStand.Precio !== undefined ? editingStand.Precio : editingStand.precio);
+    const rawPrecio = editingStand.precio !== undefined && editingStand.precio !== '' ? editingStand.precio : editingStand.Precio;
+    const precioVal = Number(rawPrecio);
     if (isNaN(precioVal) || precioVal < 0) {
       setStandModalError(
         lang === 'de'
@@ -304,26 +308,45 @@ export const AdminView: React.FC<Props> = ({
       const rawParrilla = editingStand.TieneParrilla !== undefined
         ? editingStand.TieneParrilla
         : editingStand.tiene_parrilla;
-      const isComida = (editingStand.Categoria || editingStand.categoria || 'Comida') === 'Comida';
+      const catVal = String(editingStand.categoria || editingStand.Categoria || 'Comida').trim();
+      const isComida = catVal === 'Comida';
       const tieneParrillaStr = isComida
         ? (rawParrilla === 'SI' || rawParrilla === true ? 'SI' : 'NO')
         : 'NO';
 
+      const standName = String(
+        editingStand.nombre !== undefined && editingStand.nombre !== ''
+          ? editingStand.nombre
+          : (editingStand.Nombre || `Stand ${standNum}`)
+      ).trim();
+
+      const estVal = String(editingStand.estado || editingStand.Estado || 'disponible').trim();
+      const descVal = String(
+        editingStand.descripcion !== undefined ? editingStand.descripcion : (editingStand.Descripcion || '')
+      ).trim();
+
       const standToSave: Partial<Stand> = {
         StandID: standId || undefined,
         Numero: standNum,
-        Nombre: editingStand.Nombre || editingStand.nombre || `Stand ${standNum}`,
-        Categoria: (editingStand.Categoria || editingStand.categoria || 'Comida') as CategoriaStand,
+        numero: standNum,
+        Nombre: standName,
+        nombre: standName,
+        Categoria: catVal as CategoriaStand,
+        categoria: catVal as CategoriaStand,
         TieneParrilla: tieneParrillaStr,
         tiene_parrilla: tieneParrillaStr === 'SI',
         Precio: precioVal,
-        Estado: editingStand.Estado || editingStand.estado || 'disponible',
+        precio: precioVal,
+        Estado: estVal,
+        estado: estVal,
         PosicionX: Number(editingStand.PosicionX ?? editingStand.posicion_x ?? 0),
         PosicionY: Number(editingStand.PosicionY ?? editingStand.posicion_y ?? 0),
         Ancho: Number(editingStand.Ancho ?? editingStand.ancho ?? 1),
         Alto: Number(editingStand.Alto ?? editingStand.alto ?? 1),
-        Descripcion: editingStand.Descripcion || editingStand.descripcion || '',
+        Descripcion: descVal,
+        descripcion: descVal,
       };
+
       const res = await backendService.saveStand(token, standToSave);
       if (!res.ok) {
         if (res.error && (res.error.includes('expirada') || res.error.includes('Sesion'))) {
@@ -338,10 +361,35 @@ export const AdminView: React.FC<Props> = ({
         }
         throw new Error(errorMsg);
       }
-      showFeedback(lang === 'de' ? 'Stand erfolgreich in Google Sheets gespeichert' : 'Stand guardado con éxito en Google Sheets', 'success');
+
       setStandModalOpen(false);
       setStandModalError(null);
-      await loadAdminData(token, true);
+
+      // Verify that values were updated in Google Sheets by querying real backend
+      const updatedData = await loadAdminData(token, true);
+      if (updatedData && Array.isArray(updatedData.stands)) {
+        const savedStand = updatedData.stands.find(
+          (s) => (standId && String(s.StandID || s.id || '') === String(standId)) || String(s.Numero || s.numero || '') === String(standNum)
+        );
+
+        if (savedStand) {
+          const savedPrice = Number(savedStand.Precio !== undefined ? savedStand.Precio : savedStand.precio);
+          const savedCat = String(savedStand.Categoria || savedStand.categoria || '');
+          const savedNum = String(savedStand.Numero !== undefined ? savedStand.Numero : savedStand.numero);
+
+          if (savedPrice !== precioVal || savedCat !== catVal || savedNum !== standNum) {
+            showFeedback(
+              lang === 'de'
+                ? 'Achtung: Der Server meldete Erfolg, aber die in Google Sheets reflektierten Daten stimmen nicht mit den gespeicherten Werten überein.'
+                : 'Atención: El servidor respondió éxito, pero los datos reflejados en Google Sheets no coinciden con los valores guardados.',
+              'error'
+            );
+            return;
+          }
+        }
+      }
+
+      showFeedback(lang === 'de' ? 'Stand erfolgreich in Google Sheets gespeichert' : 'Stand guardado con éxito en Google Sheets', 'success');
     } catch (err: any) {
       const msg = err.message || (lang === 'de' ? 'Fehler beim Speichern des Stands' : 'Error al guardar stand');
       if (msg.includes('expirada') || msg.includes('Sesion') || msg.includes('no autorizada')) {
@@ -2055,9 +2103,9 @@ export const AdminView: React.FC<Props> = ({
                 <input
                   type="text"
                   required
-                  value={editingStand.numero}
+                  value={editingStand.numero !== undefined ? editingStand.numero : (editingStand.Numero || '')}
                   onChange={(e) =>
-                    setEditingStand({ ...editingStand, numero: e.target.value })
+                    setEditingStand({ ...editingStand, numero: e.target.value, Numero: e.target.value })
                   }
                   className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 font-mono"
                 />
@@ -2069,10 +2117,10 @@ export const AdminView: React.FC<Props> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder={`Stand ${editingStand.numero || ''}`}
-                  value={editingStand.nombre || ''}
+                  placeholder={`Stand ${editingStand.numero || editingStand.Numero || ''}`}
+                  value={editingStand.nombre !== undefined ? editingStand.nombre : (editingStand.Nombre || '')}
                   onChange={(e) =>
-                    setEditingStand({ ...editingStand, nombre: e.target.value })
+                    setEditingStand({ ...editingStand, nombre: e.target.value, Nombre: e.target.value })
                   }
                   className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700"
                 />
@@ -2089,13 +2137,13 @@ export const AdminView: React.FC<Props> = ({
                     { id: 'Games', label: t.categoryGames, icon: Gamepad2 },
                   ].map((cat) => {
                     const Icon = cat.icon;
-                    const isSelected = editingStand.categoria === cat.id;
+                    const isSelected = (editingStand.categoria || editingStand.Categoria) === cat.id;
                     return (
                       <button
                         key={cat.id}
                         type="button"
                         onClick={() =>
-                          setEditingStand({ ...editingStand, categoria: cat.id })
+                          setEditingStand({ ...editingStand, categoria: cat.id, Categoria: cat.id as CategoriaStand })
                         }
                         className={`w-full py-2.5 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-2 border shadow-xs min-h-[42px] active:scale-98 ${
                           isSelected
@@ -2112,7 +2160,7 @@ export const AdminView: React.FC<Props> = ({
               </div>
 
               {/* Grill modality when category is Comida */}
-              {editingStand.categoria === 'Comida' && (
+              {(editingStand.categoria || editingStand.Categoria || 'Comida') === 'Comida' && (
                 <div className="p-3 rounded-xl bg-orange-50/70 border border-orange-200 space-y-1.5">
                   <label className="block text-xs font-semibold text-gray-800">
                     {lang === 'de' ? 'Grill vorhanden?' : '¿Cuenta con parrilla?'}
@@ -2165,9 +2213,9 @@ export const AdminView: React.FC<Props> = ({
                 </label>
                 <input
                   type="number"
-                  value={editingStand.precio}
+                  value={editingStand.precio !== undefined ? editingStand.precio : (editingStand.Precio ?? '')}
                   onChange={(e) =>
-                    setEditingStand({ ...editingStand, precio: e.target.value })
+                    setEditingStand({ ...editingStand, precio: e.target.value, Precio: e.target.value })
                   }
                   className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700 font-mono"
                 />
@@ -2178,9 +2226,9 @@ export const AdminView: React.FC<Props> = ({
                   {t.standStatus}
                 </label>
                 <select
-                  value={editingStand.estado}
+                  value={editingStand.estado !== undefined ? editingStand.estado : (editingStand.Estado || 'disponible')}
                   onChange={(e) =>
-                    setEditingStand({ ...editingStand, estado: e.target.value })
+                    setEditingStand({ ...editingStand, estado: e.target.value, Estado: e.target.value })
                   }
                   className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700"
                 >
@@ -2195,9 +2243,9 @@ export const AdminView: React.FC<Props> = ({
                 </label>
                 <input
                   type="text"
-                  value={editingStand.descripcion || ''}
+                  value={editingStand.descripcion !== undefined ? editingStand.descripcion : (editingStand.Descripcion || '')}
                   onChange={(e) =>
-                    setEditingStand({ ...editingStand, descripcion: e.target.value })
+                    setEditingStand({ ...editingStand, descripcion: e.target.value, Descripcion: e.target.value })
                   }
                   placeholder="Detalles opcionales"
                   className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 focus:outline-none focus:border-red-700 focus:ring-1 focus:ring-red-700"

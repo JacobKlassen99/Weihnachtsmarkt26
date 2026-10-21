@@ -142,6 +142,9 @@ export interface AdminData {
 
 export interface ScanResult {
   ok: boolean;
+  autorizado?: boolean;
+  statusType?: 'authorized' | 'denied' | 'error';
+  motivo?: string;
   error?: string;
   mensaje?: string;
   nombre?: string;
@@ -149,6 +152,7 @@ export interface ScanResult {
   tipo?: 'cliente' | 'invitado' | string;
   estado?: string;
   fecha_hora?: string;
+  raw?: any;
 }
 
 export interface MiAlquilerData {

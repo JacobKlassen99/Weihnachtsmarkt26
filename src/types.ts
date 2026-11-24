@@ -39,6 +39,7 @@ export interface Stand {
   Alto?: number;
   tiene_parrilla?: boolean | string;
   TieneParrilla?: boolean | string;
+  parrilla?: boolean | string;
   modalidad?: 'con_parrilla' | 'sin_parrilla' | string;
   descripcion?: string;
   Descripcion?: string;
@@ -48,10 +49,16 @@ export interface Stand {
 
 export interface Solicitud {
   id: string;
+  SolicitudID?: string;
   stand: string | number;
+  NumeroStand?: string | number;
   categoria: string;
+  Categoria?: string;
   nombre: string;
+  Nombre?: string;
+  NombreCompleto?: string;
   telefono: string;
+  Telefono?: string;
   observacion?: string;
   Observacion?: string;
   tiene_parrilla?: boolean | string;
@@ -59,7 +66,9 @@ export interface Solicitud {
   modalidad?: string;
   Modalidad?: string;
   fecha: string;
+  FechaSolicitud?: string;
   estado: 'pendiente' | 'confirmada' | 'rechazada' | string;
+  Estado?: string;
   gestion?: string;
 }
 
@@ -67,36 +76,74 @@ export interface Alquiler {
   id: string;
   AlquilerID?: string;
   stand: string | number;
+  NumeroStand?: string | number;
   cliente: string;
+  Cliente?: string;
+  NombreCompleto?: string;
+  nombreCompleto?: string;
   telefono: string;
+  Telefono?: string;
   token_cliente: string;
+  TokenCliente?: string;
   qr_cliente?: string;
   fecha_alquiler: string;
+  FechaAlquiler?: string;
+  FechaConfirmacion?: string;
+  fechaConfirmacion?: string;
+  fecha_confirmacion?: string;
   estado: 'activo' | 'cancelado' | string;
+  Estado?: 'ACTIVO' | 'CANCELADO' | string;
   gestion?: string;
+  Gestion?: string;
   categoria?: string;
+  Categoria?: string;
 }
 
 export interface Invitado {
   id: string;
+  InvitadoID?: string;
   id_alquiler?: string;
   stand: string | number;
+  NumeroStand?: string | number;
   token_invitacion: string;
+  TokenInvitacion?: string;
   nombre_invitado?: string;
+  NombreInvitado?: string;
+  NombreCompleto?: string;
+  nombreCompleto?: string;
   qr_invitado?: string;
-  estado: 'disponible' | 'registrado' | 'revocado' | string;
+  estado: 'disponible' | 'registrado' | 'revocado' | 'activo' | 'pendiente' | string;
+  Estado?: 'ACTIVO' | 'PENDIENTE' | 'REVOCADO' | string;
   fecha_creacion?: string;
   fecha_registro?: string;
+  FechaCreacion?: string;
+  FechaRegistro?: string;
   gestion?: string;
 }
 
 export interface Acceso {
   id: string;
+  AccesoID?: string;
   fecha_hora: string;
+  FechaHora?: string;
   nombre: string;
+  Nombre?: string;
+  NombreCompleto?: string;
+  nombreCompleto?: string;
   tipo: 'cliente' | 'invitado' | string;
+  Tipo?: string;
+  PersonaTipo?: string;
+  personaTipo?: string;
+  persona_tipo?: string;
   stand: string | number;
+  NumeroStand?: string | number;
+  resultado?: string;
+  Resultado?: string;
   portero?: string;
+  Portero?: string;
+  RegistradoPor?: string;
+  registradoPor?: string;
+  registrado_por?: string;
 }
 
 export interface Usuario {
@@ -106,6 +153,8 @@ export interface Usuario {
   Usuario?: string;
   nombre: string;
   Nombre?: string;
+  NombreCompleto?: string;
+  nombreCompleto?: string;
   rol: 'admin' | 'portero' | 'ADMIN' | 'PORTERO' | string;
   Rol?: string;
   estado: 'activo' | 'inactivo' | string;
@@ -121,7 +170,9 @@ export interface Gestion {
   anio?: number;
   Anio?: number;
   activa: boolean;
+  Activa?: boolean | string;
   fecha_creacion?: string;
+  FechaCreacion?: string;
 }
 
 export interface PublicData {

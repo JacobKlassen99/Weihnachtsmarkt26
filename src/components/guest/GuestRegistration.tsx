@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
+  AlertTriangle,
   CheckCircle2,
   RefreshCw,
   Store,
@@ -16,12 +17,21 @@ interface Props {
   token: string;
   lang: Idioma;
   onBackToHome: () => void;
+  onClearTokenParam?: () => void;
+}
+
+interface ActivePassInfo {
+  id: string;
+  name: string;
+  stand?: string;
+  qr: string;
 }
 
 export const GuestRegistration: React.FC<Props> = ({
   token,
   lang,
   onBackToHome,
+  onClearTokenParam,
 }) => {
   const t = translations[lang];
 
@@ -33,6 +43,10 @@ export const GuestRegistration: React.FC<Props> = ({
   const [registeredQR, setRegisteredQR] = useState<string | null>(null);
   const [registeredName, setRegisteredName] = useState<string | null>(null);
   const [invitadoId, setInvitadoId] = useState<string | null>(null);
+
+  // Active pass replacement state
+  const [existingActivePass, setExistingActivePass] = useState<ActivePassInfo | null>(null);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
 
   const fetchGuestQr = async (id: string, sec: string) => {
     if (!id || !sec) return;
@@ -62,6 +76,8 @@ export const GuestRegistration: React.FC<Props> = ({
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const initGuest = async () => {
       const storedInvitadoId = localStorage.getItem('wm_guest_invitado_id');
       const storedSecreto = localStorage.getItem('wm_guest_secreto');
@@ -69,14 +85,104 @@ export const GuestRegistration: React.FC<Props> = ({
 
       setLoading(true);
       setError(null);
+      setShowReplaceConfirm(false);
+      setExistingActivePass(null);
 
-      // SITUACIÓN B: Invitado ya activado (tiene credenciales guardadas en este dispositivo)
+      // CASO 1: Se abrió un enlace de invitación con token (?token=...)
+      // Se da PRIORIDAD a la validación del nuevo enlace en el servidor.
+      if (token && token.trim()) {
+        try {
+          const info = await backendService.consultarInvitacion(token.trim());
+          if (cancelled) return;
+
+          if (!info.valida) {
+            setError(info.error || t.guestInvalidToken);
+            setLoading(false);
+            return;
+          }
+
+          if (info.registrado) {
+            setError(
+              lang === 'de'
+                ? 'Diese Einladung wurde bereits auf einem anderen Gerät aktiviert.'
+                : 'Esta invitación ya fue activada en otro dispositivo o teléfono.'
+            );
+            setLoading(false);
+            return;
+          }
+
+          // La nueva invitación es VÁLIDA y PENDIENTE de registro
+          setInvitationInfo(info);
+          setRegisteredQR(null);
+
+          // Verificar si este dispositivo ya tiene un pase previo guardado
+          if (storedInvitadoId && storedSecreto) {
+            try {
+              let activeId = storedInvitadoId;
+              let qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
+
+              // Intento de auto-recuperación si storedInvitadoId tenía formato de token
+              if (!qrRes || !qrRes.ok) {
+                try {
+                  const lookup = await backendService.consultarInvitacion(storedInvitadoId);
+                  if (lookup.valida) {
+                    const realId = lookup.invitado_id || lookup.InvitadoID || lookup.id;
+                    if (realId && String(realId) !== activeId) {
+                      activeId = String(realId);
+                      qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
+                    }
+                  }
+                } catch {}
+              }
+
+              if (qrRes && qrRes.ok) {
+                // El pase anterior SIGUE ACTIVO: solicitar confirmación antes de sustituirlo
+                const qrText = qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
+                const name = qrRes.data?.NombreCompleto || qrRes.NombreCompleto || qrRes.data?.nombre || qrRes.nombre || storedNombre || 'Invitado';
+                const stand = qrRes.data?.NumeroStand || qrRes.NumeroStand || qrRes.data?.stand || qrRes.stand;
+
+                setExistingActivePass({
+                  id: activeId,
+                  name: String(name),
+                  stand: stand ? String(stand) : undefined,
+                  qr: String(qrText || ''),
+                });
+                setShowReplaceConfirm(true);
+                setLoading(false);
+                return;
+              } else {
+                // El pase anterior fue REVOCADO o ya no es válido en el servidor.
+                // Permitir registrar la nueva invitación normalmente SIN mostrar error del pase revocado.
+                setShowReplaceConfirm(false);
+                setLoading(false);
+                return;
+              }
+            } catch {
+              // Si falla la verificación del pase anterior, permitir registrar el nuevo pase
+              setShowReplaceConfirm(false);
+              setLoading(false);
+              return;
+            }
+          }
+
+          // Sin pase anterior guardado: mostrar formulario directamente
+          setShowReplaceConfirm(false);
+          setLoading(false);
+          return;
+        } catch (err: any) {
+          if (cancelled) return;
+          setError(err.message || t.guestInvalidToken);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // CASO 2: Sin token en la URL (el usuario abrió Mi Pase desde la app o el menú)
       if (storedInvitadoId && storedSecreto) {
         let activeId = storedInvitadoId;
         setInvitadoId(activeId);
         if (storedNombre) setRegisteredName(storedNombre);
         try {
-          // If storedInvitadoId is a token or doesn't start with INV-, lookup official InvitadoID
           if (storedInvitadoId.toLowerCase().includes('inv_') || !storedInvitadoId.startsWith('INV-')) {
             try {
               const infoLookup = await backendService.consultarInvitacion(storedInvitadoId);
@@ -88,14 +194,11 @@ export const GuestRegistration: React.FC<Props> = ({
                   setInvitadoId(activeId);
                 }
               }
-            } catch {
-              // ignore lookup error
-            }
+            } catch {}
           }
 
           let qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
 
-          // Auto-recovery if storedInvitadoId was saved as a token instead of InvitadoID
           if (!qrRes || !qrRes.ok) {
             try {
               const infoLookup = await backendService.consultarInvitacion(storedInvitadoId);
@@ -108,9 +211,7 @@ export const GuestRegistration: React.FC<Props> = ({
                   qrRes = await backendService.qrDispositivo('INVITADO', activeId, storedSecreto);
                 }
               }
-            } catch {
-              // ignore lookup error
-            }
+            } catch {}
           }
 
           if (qrRes && qrRes.ok) {
@@ -139,40 +240,21 @@ export const GuestRegistration: React.FC<Props> = ({
         return;
       }
 
-      // SITUACIÓN A: Invitado nuevo (tiene TokenInvitacion sin utilizar)
-      if (token) {
-        try {
-          const info = await backendService.consultarInvitacion(token);
-          setInvitationInfo(info);
-
-          if (!info.valida) {
-            setError(info.error || t.guestInvalidToken);
-          } else if (info.registrado) {
-            setError(
-              lang === 'de'
-                ? 'Diese Einladung wurde bereits auf einem anderen Gerät aktiviert.'
-                : 'Esta invitación ya fue activada en otro dispositivo o teléfono.'
-            );
-          } else {
-            setRegisteredQR(null);
-          }
-        } catch (err: any) {
-          setError(err.message || t.guestInvalidToken);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setLoading(false);
-        setError(
-          t.activateFirst ||
-            (lang === 'de'
-              ? 'Bitte aktivieren Sie Ihre Einladung zuerst über den per WhatsApp erhaltenen Link.'
-              : 'Activa primero tu invitación mediante el enlace recibido por WhatsApp.')
-        );
-      }
+      // Sin token y sin credenciales guardadas
+      setLoading(false);
+      setError(
+        t.activateFirst ||
+          (lang === 'de'
+            ? 'Bitte aktivieren Sie Ihre Einladung zuerst über den per WhatsApp erhaltenen Link.'
+            : 'Activa primero tu invitación mediante el enlace recibido por WhatsApp.')
+      );
     };
 
     initGuest();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token, lang]);
 
   // QR automatic renewal every 25 seconds and on visibility/focus changes
@@ -230,7 +312,8 @@ export const GuestRegistration: React.FC<Props> = ({
       crypto.getRandomValues(array);
       const secreto = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
 
-      const res = await backendService.activarInvitado(token, guestName.trim(), secreto);
+      // NO se eliminan las credenciales anteriores hasta que la nueva activación termine con éxito
+      const res = await backendService.activarInvitado(token.trim(), guestName.trim(), secreto);
       if (!res.ok) {
         const errStr = res.error || '';
         if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
@@ -244,10 +327,10 @@ export const GuestRegistration: React.FC<Props> = ({
       }
 
       let resolvedInvitadoId = res.invitado_id || res.InvitadoID || res.id || res.Invitado_ID || res.data?.invitado_id || res.data?.InvitadoID || res.data?.id;
-      
+
       // Always consult invitation to get official backend InvitadoID (e.g. INV-...)
       try {
-        const infoAfter = await backendService.consultarInvitacion(token);
+        const infoAfter = await backendService.consultarInvitacion(token.trim());
         if (infoAfter.valida) {
           const officialId = infoAfter.invitado_id || infoAfter.InvitadoID || infoAfter.id || infoAfter.Invitado_ID;
           if (officialId) {
@@ -258,13 +341,19 @@ export const GuestRegistration: React.FC<Props> = ({
         // fallback
       }
 
-      resolvedInvitadoId = resolvedInvitadoId || res.invitado_id || res.id || token;
+      resolvedInvitadoId = resolvedInvitadoId || res.invitado_id || res.id || token.trim();
 
+      // Guardar correctamente las nuevas credenciales una vez confirmada la activación
       setInvitadoId(String(resolvedInvitadoId));
       localStorage.setItem('wm_guest_invitado_id', String(resolvedInvitadoId));
       localStorage.setItem('wm_guest_secreto', secreto);
       localStorage.setItem('wm_guest_nombre', guestName.trim());
       setRegisteredName(guestName.trim());
+      setExistingActivePass(null);
+      setShowReplaceConfirm(false);
+
+      // Limpiar el token de la URL para que al volver a abrir la app se abra el pase guardado
+      onClearTokenParam?.();
 
       await fetchGuestQr(String(resolvedInvitadoId), secreto);
     } catch (err: any) {
@@ -360,8 +449,60 @@ export const GuestRegistration: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Active Pass Replacement Confirmation */}
+        {!loading && !error && showReplaceConfirm && existingActivePass && (
+          <div className="text-center py-4 space-y-4">
+            <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center mx-auto mb-2">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">
+              {t.existingPassTitle || 'Pase de invitado existente'}
+            </h3>
+            <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 text-left text-xs space-y-1.5">
+              <p className="text-gray-600">
+                {t.existingPassNotice || 'Ya tienes un pase de invitado activo guardado en este dispositivo:'}
+              </p>
+              <div className="font-semibold text-gray-900">
+                {existingActivePass.name} {existingActivePass.stand ? `(Stand #${existingActivePass.stand})` : ''}
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              {t.existingPassQuestion ||
+                `¿Deseas registrar la nueva invitación y reemplazar este pase en este dispositivo, o conservar tu pase actual?`}
+            </p>
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  // User confirms to proceed with new invitation registration
+                  setShowReplaceConfirm(false);
+                }}
+                className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white text-xs font-semibold transition shadow-xs cursor-pointer"
+              >
+                {t.replacePassButton || 'Registrar nuevo pase (reemplazar)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // User prefers to keep their currently active pass
+                  setShowReplaceConfirm(false);
+                  setRegisteredQR(existingActivePass.qr);
+                  setRegisteredName(existingActivePass.name);
+                  if (existingActivePass.stand) {
+                    setInvitationInfo({ valida: true, registrado: true, stand: existingActivePass.stand });
+                  }
+                  onClearTokenParam?.();
+                }}
+                className="w-full py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold transition cursor-pointer"
+              >
+                {t.keepCurrentPassButton || 'Conservar mi pase actual'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Registration Form State */}
-        {!loading && !error && !registeredQR && invitationInfo?.valida && (
+        {!loading && !error && !registeredQR && !showReplaceConfirm && invitationInfo?.valida && (
           <div>
             <div className="text-center mb-6">
               <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 border border-red-100 flex items-center justify-center mx-auto mb-3">

@@ -200,6 +200,24 @@ export default function App() {
     }
   };
 
+  const handleClearGuestToken = () => {
+    setGuestTokenParam('');
+    try {
+      const url = new URL(window.location.href);
+      const hadSearchToken = url.searchParams.has('invitacion') || url.searchParams.has('token');
+      const hadHashToken = window.location.hash.includes('?token=');
+      if (hadSearchToken || hadHashToken) {
+        url.searchParams.delete('invitacion');
+        url.searchParams.delete('token');
+        const cleanSearch = url.searchParams.toString();
+        const cleanUrl = `${url.pathname}${cleanSearch ? `?${cleanSearch}` : ''}#invitacion`;
+        window.history.replaceState(null, '', cleanUrl);
+      }
+    } catch {
+      // ignore history API errors in restricted environments
+    }
+  };
+
   const handleNavigate = (view: NavView) => {
     if (currentView === 'porteria' && view !== 'porteria') {
       window.dispatchEvent(new CustomEvent('weihnachtsmarkt-stop-camera'));
@@ -217,7 +235,7 @@ export default function App() {
       } catch {
         hasStoredClient = false;
       }
-      if (hasStoredClient) {
+      if (hasStoredClient && !clientTokenParam) {
         handleClearClientToken();
         window.location.hash = '#cliente';
       } else {
@@ -227,13 +245,7 @@ export default function App() {
     else if (view === 'porteria') window.location.hash = '#porteria';
     else if (view === 'admin') window.location.hash = '#admin';
     else if (view === 'guest') {
-      const storedGuestId = localStorage.getItem('wm_guest_invitado_id');
-      if (storedGuestId) {
-        setGuestTokenParam('');
-        window.location.hash = '#invitacion';
-      } else {
-        window.location.hash = guestTokenParam ? `#invitacion?token=${guestTokenParam}` : '#invitacion';
-      }
+      window.location.hash = guestTokenParam ? `#invitacion?token=${guestTokenParam}` : '#invitacion';
     }
   };
 
@@ -322,6 +334,7 @@ export default function App() {
               token={guestTokenParam}
               lang={lang}
               onBackToHome={() => handleNavigate('public')}
+              onClearTokenParam={handleClearGuestToken}
             />
           )}
 

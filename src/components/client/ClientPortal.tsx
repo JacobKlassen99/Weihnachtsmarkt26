@@ -336,11 +336,45 @@ export const ClientPortal: React.FC<Props> = ({
     let cancelled = false;
 
     const initClient = async () => {
+      const cleanInitial = extractActivationToken(initialToken);
       const stored = getStoredClientCredentials();
 
-      // SITUACIÓN B (PRIORIDAD): Cliente ya activado en este dispositivo.
-      // Igual que Mi Pase, las credenciales guardadas se validan primero contra Google Apps Script,
-      // incluso si Safari reabre la pestaña con #cliente?token=... en la URL.
+      // SITUATION 1: User opened an activation link with a token (?token=...)
+      if (cleanInitial) {
+        setTokenInput(cleanInitial);
+        setActiveToken(cleanInitial);
+
+        if (stored) {
+          setLoading(true);
+          setError(null);
+          try {
+            await restoreStoredAccess(stored.alquilerId, stored.secreto, false);
+            if (!cancelled) {
+              setLoading(false);
+            }
+            return;
+          } catch {
+            if (cancelled) return;
+            // The stored credentials on this device are not authorized (e.g. device was reset or new token provided).
+            // Do NOT display the old rejection error on the activation screen!
+            // Show the activation screen cleanly so the user can activate their new access.
+            setError(null);
+            setHasStoredRetryError(false);
+            setShowManualFallback(false);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // No stored credentials on this device: show activation screen cleanly
+        setError(null);
+        setHasStoredRetryError(false);
+        setShowManualFallback(false);
+        setLoading(false);
+        return;
+      }
+
+      // SITUATION 2: User opened Mi Alquiler directly without an activation link (#cliente)
       if (stored) {
         setLoading(true);
         setError(null);
@@ -366,24 +400,16 @@ export const ClientPortal: React.FC<Props> = ({
             // Keep credentials untouched and let user retry when connection returns
             setHasStoredRetryError(true);
           } else {
-            // Backend explicitly rejected stored credentials (e.g. device reset or revoked rental).
-            // Allow secure recovery/activation (prefill new initialToken if present).
+            // Backend explicitly rejected stored credentials (e.g. device reset or revoked rental)
             setHasStoredRetryError(false);
-            if (initialToken) {
-              setTokenInput(initialToken);
-              setActiveToken(initialToken);
-            }
           }
           setLoading(false);
           return;
         }
       }
 
-      // SITUACIÓN A: Sin credenciales guardadas en este dispositivo
-      if (initialToken) {
-        setTokenInput(initialToken);
-        setActiveToken(initialToken);
-      }
+      // SITUATION 3: No token and no stored credentials
+      setError(null);
       setHasStoredRetryError(false);
       setLoading(false);
     };

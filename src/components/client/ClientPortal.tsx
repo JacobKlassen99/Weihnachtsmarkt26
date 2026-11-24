@@ -1,34 +1,152 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
-  CheckCircle2,
+  AlertTriangle,
   Copy,
   KeyRound,
-  MessageCircle,
   Plus,
   QrCode,
   RefreshCw,
   Share2,
   ShieldCheck,
-  Store,
   Users,
 } from 'lucide-react';
 import { translations } from '../../i18n/translations';
-import { backendService, getOrCreateSecretoDispositivo } from '../../services/backend';
+import { backendService } from '../../services/backend';
 import { Idioma, Invitado, MiAlquilerData } from '../../types';
 
 interface Props {
   initialToken?: string;
   lang: Idioma;
+  onClearTokenParam?: () => void;
 }
 
-export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
+const CLIENT_ID_KEY = 'wm_client_alquiler_id';
+const CLIENT_SECRET_KEY = 'wm_client_secreto';
+
+function safeGetStorage(key: string): string | null {
+  try {
+    const val = localStorage.getItem(key);
+    return val && val.trim() ? val.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorage(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return localStorage.getItem(key) === value;
+  } catch {
+    return false;
+  }
+}
+
+function getStoredClientCredentials(): { alquilerId: string; secreto: string } | null {
+  const alquilerId = safeGetStorage(CLIENT_ID_KEY);
+  if (!alquilerId) return null;
+  // Read primary client secret; fallback read-only to legacy key if present for backward compatibility
+  const secreto =
+    safeGetStorage(CLIENT_SECRET_KEY) ||
+    safeGetStorage(`wm_secreto_dispositivo_${alquilerId}`);
+  if (!secreto) return null;
+  return { alquilerId, secreto };
+}
+
+function persistClientCredentials(alquilerId: string, secreto: string): boolean {
+  const savedId = safeSetStorage(CLIENT_ID_KEY, String(alquilerId).trim());
+  const savedSec = safeSetStorage(CLIENT_SECRET_KEY, String(secreto).trim());
+  return savedId && savedSec;
+}
+
+function extractActivationToken(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  try {
+    if (trimmed.includes('://') || trimmed.startsWith('#') || trimmed.includes('?')) {
+      const normalized =
+        trimmed.startsWith('#') || trimmed.startsWith('?')
+          ? `https://placeholder.local/${trimmed}`
+          : trimmed;
+      const url = new URL(normalized);
+      const searchToken = url.searchParams.get('token') || url.searchParams.get('cliente');
+      if (searchToken) return searchToken.trim();
+      if (url.hash && url.hash.includes('?')) {
+        const hashParams = new URLSearchParams(url.hash.split('?')[1]);
+        const hashToken = hashParams.get('token') || hashParams.get('cliente');
+        if (hashToken) return hashToken.trim();
+      }
+    }
+  } catch {
+    // Fallback to raw trimmed string
+  }
+  return trimmed;
+}
+
+function resolveAlquilerId(obj: any): string {
+  if (!obj || typeof obj !== 'object') return '';
+  const candidates = [
+    obj?.alquiler?.AlquilerID,
+    obj?.alquiler?.alquilerID,
+    obj?.alquiler?.alquiler_id,
+    obj?.alquiler?.id,
+    obj?.data?.alquiler?.AlquilerID,
+    obj?.data?.alquiler?.id,
+    obj?.data?.AlquilerID,
+    obj?.data?.alquilerID,
+    obj?.data?.alquiler_id,
+    obj?.data?.Alquiler_ID,
+    obj?.data?.PersonaID,
+    obj?.data?.id,
+    obj?.AlquilerID,
+    obj?.alquilerID,
+    obj?.alquiler_id,
+    obj?.Alquiler_ID,
+    obj?.PersonaID,
+    obj?.id,
+  ];
+  for (const val of candidates) {
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
+      return String(val).trim();
+    }
+  }
+  return '';
+}
+
+function isLikelyNetworkError(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || '').toLowerCase();
+  return (
+    msg.includes('error de red') ||
+    msg.includes('sin conexión') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('load failed') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('error http 5') ||
+    msg.includes('página html') ||
+    msg.includes('con html') ||
+    msg.includes('timeout') ||
+    msg.includes('aborted')
+  );
+}
+
+export const ClientPortal: React.FC<Props> = ({
+  initialToken = '',
+  lang,
+  onClearTokenParam,
+}) => {
   const t = translations[lang];
 
   const [tokenInput, setTokenInput] = useState(initialToken);
   const [activeToken, setActiveToken] = useState(initialToken);
-  const [loading, setLoading] = useState(false);
+  // Start loading=true (same as Mi Pase) so credential recovery completes before rendering any activation form
+  const [loading, setLoading] = useState(true);
+  const [activating, setActivating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasStoredRetryError, setHasStoredRetryError] = useState(false);
+  const [showManualFallback, setShowManualFallback] = useState(false);
+  const [storageBlocked, setStorageBlocked] = useState(false);
   const [rentalData, setRentalData] = useState<MiAlquilerData | null>(null);
 
   // Invitation creation state
@@ -42,20 +160,38 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState(false);
 
-  const fetchQrCode = async (currentPersonaId: string) => {
-    const secreto = localStorage.getItem('wm_client_secreto') || getOrCreateSecretoDispositivo(currentPersonaId);
-    if (!currentPersonaId || !secreto) return;
+  const personaIdRef = useRef<string | null>(null);
+  const secretoRef = useRef<string | null>(null);
+  const hasActiveRentalRef = useRef(false);
+  const qrCodeTextRef = useRef<string | null>(null);
 
-    setQrLoading(true);
-    setQrError(false);
+  personaIdRef.current = personaId;
+  qrCodeTextRef.current = qrCodeText;
+
+  const fetchQrCode = async (
+    currentPersonaId: string,
+    currentSecreto: string,
+    isSilentRenewal: boolean = false
+  ) => {
+    if (!currentPersonaId || !currentSecreto) return;
+
+    if (!isSilentRenewal) {
+      setQrLoading(true);
+      setQrError(false);
+    }
     try {
-      const qrRes = await backendService.qrDispositivo('CLIENTE', String(currentPersonaId), secreto);
+      const qrRes = await backendService.qrDispositivo(
+        'CLIENTE',
+        String(currentPersonaId),
+        currentSecreto
+      );
       if (qrRes && qrRes.ok) {
-        const qrText = qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
+        const qrText =
+          qrRes.data?.QR || qrRes.QR || qrRes.qr_acceso || qrRes.data?.qr_acceso;
         if (qrText) {
           setQrCodeText(String(qrText));
           setQrError(false);
-        } else {
+        } else if (!isSilentRenewal) {
           setQrError(true);
           setQrCodeText(null);
         }
@@ -64,159 +200,316 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
         setQrCodeText(null);
       }
     } catch {
-      setQrError(true);
-      setQrCodeText(null);
+      // Ignore transient network hiccups on automatic background renewal (same as Mi Pase)
+      if (!isSilentRenewal || !qrCodeTextRef.current) {
+        setQrError(true);
+        if (!qrCodeTextRef.current) {
+          setQrCodeText(null);
+        }
+      }
     } finally {
-      setQrLoading(false);
+      if (!isSilentRenewal) {
+        setQrLoading(false);
+      }
     }
   };
 
-  const fetchRental = async (tokenOrId: string, shouldActivate: boolean = false) => {
-    if (!tokenOrId) return;
-    setLoading(true);
+  const restoreStoredAccess = async (
+    alquilerId: string,
+    secreto: string,
+    isManualRefresh: boolean = false
+  ) => {
+    const data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
+    const officialAlquilerId = resolveAlquilerId(data) || alquilerId;
+
+    const persisted = persistClientCredentials(officialAlquilerId, secreto);
+    if (!persisted) {
+      setStorageBlocked(true);
+    }
+
+    personaIdRef.current = String(officialAlquilerId);
+    secretoRef.current = secreto;
+    hasActiveRentalRef.current = true;
+
+    setPersonaId(String(officialAlquilerId));
+    setActiveToken(String(officialAlquilerId));
+    setRentalData(data);
     setError(null);
+    setHasStoredRetryError(false);
+    setShowManualFallback(false);
+
+    // Strip stale activation token from URL once device credentials are verified
+    onClearTokenParam?.();
+
+    await fetchQrCode(String(officialAlquilerId), secreto, isManualRefresh);
+  };
+
+  const activateClientAccess = async (rawToken: string) => {
+    const cleanToken = extractActivationToken(rawToken);
+    if (!cleanToken) return;
+
+    setActivating(true);
+    setError(null);
+    let activatedOnServer = false;
     try {
-      let alquilerId = localStorage.getItem('wm_client_alquiler_id') || '';
-      let secreto = localStorage.getItem('wm_client_secreto') || '';
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      const secreto = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
 
-      if (shouldActivate) {
-        // Clear previous stored device access so a fresh activation happens with the new token
-        localStorage.removeItem('wm_client_alquiler_id');
-        localStorage.removeItem('wm_client_secreto');
-        alquilerId = '';
-
-        const array = new Uint8Array(32);
-        crypto.getRandomValues(array);
-        secreto = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
-
-        const actRes = await backendService.activarCliente(tokenOrId, secreto);
-        if (actRes && !actRes.ok) {
-          const errStr = actRes.error || '';
-          if (errStr.includes('otro dispositivo') || errStr.includes('dispositivo') || errStr.includes('ocupado') || errStr.includes('vinculado')) {
-            throw new Error(lang === 'de' 
+      // Do NOT clear existing localStorage before activarCliente succeeds (same as Mi Pase)
+      const actRes = await backendService.activarCliente(cleanToken, secreto);
+      if (!actRes || !actRes.ok) {
+        const errStr = actRes?.error || '';
+        if (
+          errStr.includes('otro dispositivo') ||
+          errStr.includes('dispositivo') ||
+          errStr.includes('ocupado') ||
+          errStr.includes('vinculado')
+        ) {
+          throw new Error(
+            lang === 'de'
               ? 'Dieser Zugang wurde bereits auf einem anderen Gerät aktiviert. Bitte wenden Sie sich an den Administrator zum Zurücksetzen.'
-              : 'Este acceso ya fue activado en otro dispositivo o teléfono. Contacta al administrador para restablecer el acceso si necesitas cambiar de teléfono.');
-          }
-          throw new Error(errStr || (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido'));
+              : 'Este acceso ya fue activado en otro dispositivo o teléfono. Contacta al administrador para restablecer el acceso si necesitas cambiar de teléfono.'
+          );
         }
-        if (actRes && actRes.ok) {
-          alquilerId = actRes.AlquilerID || actRes.alquiler_id || actRes.id || actRes.data?.AlquilerID || actRes.data?.id || '';
-        }
+        throw new Error(
+          errStr || (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido')
+        );
       }
 
-      if (!alquilerId && !shouldActivate) {
-        alquilerId = tokenOrId;
-      }
-      if (!secreto) {
-        secreto = getOrCreateSecretoDispositivo(alquilerId || tokenOrId);
-      }
+      activatedOnServer = true;
+      const activatedId = resolveAlquilerId(actRes);
+      const targetId = activatedId || cleanToken;
 
-      let data: MiAlquilerData;
-      if (alquilerId && !shouldActivate) {
-        data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
-      } else if (shouldActivate) {
-        const targetId = alquilerId || tokenOrId;
-        alquilerId = targetId;
-        data = await backendService.getMiAlquilerDispositivo(alquilerId, secreto);
-      } else {
-        data = await backendService.getMiAlquiler(tokenOrId);
-        alquilerId = data.alquiler?.AlquilerID || data.alquiler?.id || tokenOrId;
-        secreto = getOrCreateSecretoDispositivo(alquilerId);
-      }
+      // Persist immediately after server activation succeeds (same as Mi Pase)
+      const persistedInitial = persistClientCredentials(targetId, secreto);
+      setStorageBlocked(!persistedInitial);
+      secretoRef.current = secreto;
 
-      const currentPersonaId = alquilerId || data.alquiler?.AlquilerID || data.alquiler?.id || tokenOrId;
-      setPersonaId(String(currentPersonaId));
-      setActiveToken(tokenOrId);
+      const data = await backendService.getMiAlquilerDispositivo(targetId, secreto);
+      const officialAlquilerId = resolveAlquilerId(data) || targetId;
 
-      // Save both AlquilerID and SecretoDispositivo persistently together in local storage
-      localStorage.setItem('wm_client_alquiler_id', String(currentPersonaId));
-      localStorage.setItem('wm_client_secreto', secreto);
+      // Upgrade stored ID to official AlquilerID if returned inside rental data
+      const persistedFinal = persistClientCredentials(officialAlquilerId, secreto);
+      setStorageBlocked(!persistedFinal);
 
+      personaIdRef.current = String(officialAlquilerId);
+      secretoRef.current = secreto;
+      hasActiveRentalRef.current = true;
+
+      setPersonaId(String(officialAlquilerId));
+      setActiveToken(String(officialAlquilerId));
       setRentalData(data);
-      await fetchQrCode(String(currentPersonaId));
+      setHasStoredRetryError(false);
+      setShowManualFallback(false);
+
+      // Clean activation token from URL so reopening Safari does not return to activation link
+      onClearTokenParam?.();
+
+      await fetchQrCode(String(officialAlquilerId), secreto, false);
     } catch (err: any) {
-      setError(err.message || (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido'));
-      setRentalData(null);
+      setError(
+        err?.message ||
+          (lang === 'de' ? 'Ungültiger Aktivierungslink' : 'Enlace de activación no válido')
+      );
+      if (activatedOnServer) {
+        // Activation succeeded and device secret is saved; let user retry fetching data without re-activating
+        setHasStoredRetryError(true);
+        setShowManualFallback(false);
+        onClearTokenParam?.();
+      }
+      if (!hasActiveRentalRef.current) {
+        setRentalData(null);
+      }
     } finally {
+      setActivating(false);
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const storedAlquilerId = localStorage.getItem('wm_client_alquiler_id');
-    const storedSecreto = localStorage.getItem('wm_client_secreto');
-
-    if (initialToken) {
-      setTokenInput(initialToken);
-      setActiveToken(initialToken);
-      // Do NOT consume or auto-activate upon opening the link; wait for user confirmation.
-    } else if (storedAlquilerId && storedSecreto) {
-      setActiveToken(storedAlquilerId);
-      fetchRental(storedAlquilerId, false); // Subsequent open: direct fetch via miAlquilerDispositivo, NO activation
+    // Avoid redundant re-check right after activation/restoration clears initialToken
+    if (hasActiveRentalRef.current && !initialToken) {
+      return;
     }
+
+    let cancelled = false;
+
+    const initClient = async () => {
+      const stored = getStoredClientCredentials();
+
+      // SITUACIÓN B (PRIORIDAD): Cliente ya activado en este dispositivo.
+      // Igual que Mi Pase, las credenciales guardadas se validan primero contra Google Apps Script,
+      // incluso si Safari reabre la pestaña con #cliente?token=... en la URL.
+      if (stored) {
+        setLoading(true);
+        setError(null);
+        setHasStoredRetryError(false);
+        setShowManualFallback(false);
+
+        try {
+          await restoreStoredAccess(stored.alquilerId, stored.secreto, false);
+          if (!cancelled) {
+            setLoading(false);
+          }
+          return;
+        } catch (err: any) {
+          if (cancelled) return;
+          const msg =
+            err?.message ||
+            (lang === 'de'
+              ? 'Gespeicherter Zugang konnte nicht überprüft werden'
+              : 'No se pudo verificar el acceso guardado en este dispositivo');
+          setError(msg);
+
+          if (isLikelyNetworkError(err)) {
+            // Keep credentials untouched and let user retry when connection returns
+            setHasStoredRetryError(true);
+          } else {
+            // Backend explicitly rejected stored credentials (e.g. device reset or revoked rental).
+            // Allow secure recovery/activation (prefill new initialToken if present).
+            setHasStoredRetryError(false);
+            if (initialToken) {
+              setTokenInput(initialToken);
+              setActiveToken(initialToken);
+            }
+          }
+          setLoading(false);
+          return;
+        }
+      }
+
+      // SITUACIÓN A: Sin credenciales guardadas en este dispositivo
+      if (initialToken) {
+        setTokenInput(initialToken);
+        setActiveToken(initialToken);
+      }
+      setHasStoredRetryError(false);
+      setLoading(false);
+    };
+
+    initClient();
+
+    return () => {
+      cancelled = true;
+    };
   }, [initialToken]);
 
-  // QR automatic renewal every 25 seconds and on visibility/focus changes
-  const personaIdRef = useRef(personaId);
-  personaIdRef.current = personaId;
+  // QR automatic renewal every 25 seconds and on visibility/focus/pageshow (iOS Safari)
+  const hasRental = Boolean(rentalData);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const pId = personaIdRef.current;
-      if (pId) {
-        fetchQrCode(pId);
+    if (!hasRental) return;
+
+    const renewQr = () => {
+      const stored = getStoredClientCredentials();
+      const id = personaIdRef.current || stored?.alquilerId;
+      const sec = secretoRef.current || stored?.secreto;
+      if (id && sec) {
+        fetchQrCode(id, sec, true);
       }
-    }, 25000);
+    };
+
+    const interval = setInterval(renewQr, 25000);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        const pId = personaIdRef.current;
-        if (pId) {
-          fetchQrCode(pId);
-        }
+        renewQr();
       }
     };
 
-    const handleFocus = () => {
-      const pId = personaIdRef.current;
-      if (pId) {
-        fetchQrCode(pId);
-      }
+    const handlePageShow = () => {
+      renewQr();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener('focus', renewQr);
+    window.addEventListener('pageshow', handlePageShow);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', renewQr);
+      window.removeEventListener('pageshow', handlePageShow);
     };
-  }, []);
+  }, [hasRental]);
 
   const handleManualLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tokenInput.trim()) return;
-    setActiveToken(tokenInput.trim());
-    fetchRental(tokenInput.trim(), true);
+    const cleaned = extractActivationToken(tokenInput);
+    if (!cleaned) return;
+    setActiveToken(cleaned);
+    activateClientAccess(cleaned);
+  };
+
+  const handleRetryStoredAccess = async () => {
+    const stored = getStoredClientCredentials();
+    if (!stored) {
+      setHasStoredRetryError(false);
+      setShowManualFallback(true);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await restoreStoredAccess(stored.alquilerId, stored.secreto, false);
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          (lang === 'de'
+            ? 'Gespeicherter Zugang konnte nicht überprüft werden'
+            : 'No se pudo verificar el acceso guardado en este dispositivo')
+      );
+      setHasStoredRetryError(isLikelyNetworkError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefreshRental = async () => {
+    const stored = getStoredClientCredentials();
+    const id = personaIdRef.current || stored?.alquilerId || resolveAlquilerId(rentalData);
+    const sec = secretoRef.current || stored?.secreto;
+    if (!id || !sec) return;
+
+    setRefreshing(true);
+    try {
+      await restoreStoredAccess(String(id), sec, true);
+    } catch (err: any) {
+      setInviteError(
+        err?.message ||
+          (lang === 'de' ? 'Fehler beim Aktualisieren der Daten' : 'Error al actualizar los datos')
+      );
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleCreateInvitation = async () => {
-    const alquilerId = personaId || localStorage.getItem('wm_client_alquiler_id') || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID;
-    if (!alquilerId) return;
+    const stored = getStoredClientCredentials();
+    const alquilerId = personaIdRef.current || stored?.alquilerId || resolveAlquilerId(rentalData);
+    const secreto = secretoRef.current || stored?.secreto;
+    if (!alquilerId || !secreto) return;
+
     setCreatingInvite(true);
     setInviteError(null);
     try {
-      const secreto = localStorage.getItem('wm_client_secreto') || getOrCreateSecretoDispositivo(String(alquilerId));
       const res = await backendService.crearInvitacion(String(alquilerId), secreto);
       if (!res.ok) {
-        setInviteError(res.error || res.mensaje || (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'No se pudo generar la invitación'));
+        setInviteError(
+          res.error ||
+            res.mensaje ||
+            (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'No se pudo generar la invitación')
+        );
         return;
       }
-      // Re-fetch rental data using miAlquilerDispositivo
-      await fetchRental(String(alquilerId), false);
+      // Re-fetch rental data using miAlquilerDispositivo without unmounting view
+      await restoreStoredAccess(String(alquilerId), secreto, true);
     } catch (err: any) {
-      setInviteError(err.message || (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'Error al crear invitación'));
+      setInviteError(
+        err.message ||
+          (lang === 'de' ? 'Fehler beim Erstellen der Einladung' : 'Error al crear invitación')
+      );
     } finally {
       setCreatingInvite(false);
     }
@@ -259,8 +552,47 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
         </p>
       </div>
 
-      {/* Token Input Bar or Activation Options if no active rental yet */}
-      {!rentalData && (
+      {/* Initial Session Recovery Loading State (prevents activation form flash) */}
+      {loading && !rentalData && (
+        <div className="max-w-md mx-auto p-8 rounded-2xl bg-white border border-gray-200 shadow-sm text-center">
+          <RefreshCw className="w-8 h-8 text-red-700 animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-gray-800">{t.checkingAccess}</p>
+        </div>
+      )}
+
+      {/* Network Retry State when valid stored credentials exist */}
+      {!loading && !rentalData && hasStoredRetryError && !showManualFallback && (
+        <div className="max-w-md mx-auto p-6 sm:p-8 rounded-2xl bg-white border border-gray-200 shadow-sm text-center space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900">{t.errorOccurred}</h3>
+          <p className="text-xs text-gray-600 leading-relaxed">{t.connectionRetryHint}</p>
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs text-left">
+              {error}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleRetryStoredAccess}
+            className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>{t.retry}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowManualFallback(true)}
+            className="w-full py-2 rounded-lg text-xs text-gray-600 hover:text-red-700 font-medium transition"
+          >
+            {t.useAnotherCode}
+          </button>
+        </div>
+      )}
+
+      {/* Token Input Bar or Activation Options only after credential check completes */}
+      {!loading && !rentalData && (!hasStoredRetryError || showManualFallback) && (
         <div className="max-w-md mx-auto p-6 sm:p-8 rounded-2xl bg-white border border-gray-200 shadow-sm">
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center mx-auto mb-4 border border-red-100">
@@ -282,7 +614,33 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
 
           {initialToken ? (
             <div className="space-y-4">
-              {/* Option 1: Use in installed app */}
+              {/* Primary Option: Activate directly here (browser or installed app, no installation required) */}
+              <div className="p-4 rounded-xl bg-red-50/50 border border-red-200 space-y-3 text-left">
+                <div>
+                  <h4 className="text-xs font-bold text-gray-900 mb-1">{t.optionBrowserTitle}</h4>
+                  <p className="text-[11px] text-gray-600 leading-relaxed">{t.optionBrowserDesc}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveToken(initialToken);
+                    activateClientAccess(initialToken);
+                  }}
+                  disabled={activating}
+                  className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {activating ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>{t.loading}</span>
+                    </>
+                  ) : (
+                    <span>{t.activateHereButton}</span>
+                  )}
+                </button>
+              </div>
+
+              {/* Optional Secondary Option: Copy code if user prefers using already-installed PWA */}
               <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3 text-left">
                 <div>
                   <h4 className="text-xs font-bold text-gray-900 mb-1">{t.optionInstalledAppTitle}</h4>
@@ -305,37 +663,11 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                   </button>
                 </div>
               </div>
-
-              {/* Option 2: Activate here */}
-              <div className="p-4 rounded-xl bg-red-50/50 border border-red-200 space-y-3 text-left">
-                <div>
-                  <h4 className="text-xs font-bold text-gray-900 mb-1">{t.optionBrowserTitle}</h4>
-                  <p className="text-[11px] text-gray-600 leading-relaxed">{t.optionBrowserDesc}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveToken(initialToken);
-                    fetchRental(initialToken, true);
-                  }}
-                  disabled={loading}
-                  className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>{t.loading}</span>
-                    </>
-                  ) : (
-                    <span>{t.activateHereButton}</span>
-                  )}
-                </button>
-              </div>
             </div>
           ) : (
             <div className="space-y-4 text-center">
-              <div className="p-3.5 mb-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed text-left">
-                <span className="font-bold block mb-1">
+              <div className="p-3.5 mb-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[11px] leading-relaxed text-left">
+                <span className="font-bold text-gray-900 block mb-1">
                   {t.pwaNoteTitle}
                 </span>
                 {t.pwaNoteText}
@@ -352,10 +684,10 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                 />
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={activating}
                   className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {loading ? (
+                  {activating ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       <span>{t.loading}</span>
@@ -373,6 +705,14 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
       {/* Active Rental Content */}
       {rentalData && (
         <div className="space-y-6">
+          {/* Storage Blocked Notice (e.g. Private Browsing mode) */}
+          {storageBlocked && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>{t.storageBlockedNotice}</span>
+            </div>
+          )}
+
           {/* Top Banner: Stand Info & Entry QR */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Stand Info Card */}
@@ -425,11 +765,11 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
 
               <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
                 <button
-                  onClick={() => fetchRental(personaId || activeToken, false)}
-                  disabled={loading}
+                  onClick={handleRefreshRental}
+                  disabled={refreshing}
                   className="flex items-center gap-1.5 text-gray-700 hover:text-red-700 font-medium"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                   <span>{t.refreshData}</span>
                 </button>
               </div>
@@ -465,12 +805,6 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                     fgColor="#000000"
                     bgColor="#FFFFFF"
                   />
-                  {qrLoading && (
-                    <div className="text-[10px] text-red-700 font-semibold mt-1 flex items-center justify-center gap-1">
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      <span>{t.updatingCode}</span>
-                    </div>
-                  )}
                 </div>
               ) : (qrError || !qrCodeText) && !qrLoading ? (
                 <div className="p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 inline-block mb-3 text-center w-64 h-64 flex flex-col items-center justify-center">
@@ -480,8 +814,13 @@ export const ClientPortal: React.FC<Props> = ({ initialToken = '', lang }) => {
                   </span>
                   <button
                     onClick={() => {
-                      const currentPersonaId = personaId || rentalData?.alquiler?.id || rentalData?.alquiler?.AlquilerID || activeToken;
-                      if (currentPersonaId) fetchQrCode(String(currentPersonaId));
+                      const stored = getStoredClientCredentials();
+                      const currentPersonaId =
+                        personaIdRef.current || stored?.alquilerId || resolveAlquilerId(rentalData) || activeToken;
+                      const currentSecreto = secretoRef.current || stored?.secreto;
+                      if (currentPersonaId && currentSecreto) {
+                        fetchQrCode(String(currentPersonaId), currentSecreto, false);
+                      }
                     }}
                     className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white text-xs font-semibold transition shadow-xs"
                   >

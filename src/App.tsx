@@ -182,13 +182,48 @@ export default function App() {
     localStorage.setItem('weihnachtsmarkt_lang', newLang);
   };
 
+  const handleClearClientToken = () => {
+    setClientTokenParam('');
+    try {
+      const url = new URL(window.location.href);
+      const hadSearchToken = url.searchParams.has('cliente') || url.searchParams.has('token');
+      const hadHashToken = window.location.hash.includes('?token=');
+      if (hadSearchToken || hadHashToken) {
+        url.searchParams.delete('cliente');
+        url.searchParams.delete('token');
+        const cleanSearch = url.searchParams.toString();
+        const cleanUrl = `${url.pathname}${cleanSearch ? `?${cleanSearch}` : ''}#cliente`;
+        window.history.replaceState(null, '', cleanUrl);
+      }
+    } catch {
+      // ignore history API errors in restricted environments
+    }
+  };
+
   const handleNavigate = (view: NavView) => {
     if (currentView === 'porteria' && view !== 'porteria') {
       window.dispatchEvent(new CustomEvent('weihnachtsmarkt-stop-camera'));
     }
     setCurrentView(view);
     if (view === 'public') window.location.hash = '#home';
-    else if (view === 'client') window.location.hash = clientTokenParam ? `#cliente?token=${clientTokenParam}` : '#cliente';
+    else if (view === 'client') {
+      let hasStoredClient = false;
+      try {
+        const storedId = localStorage.getItem('wm_client_alquiler_id');
+        const storedSec =
+          localStorage.getItem('wm_client_secreto') ||
+          (storedId ? localStorage.getItem(`wm_secreto_dispositivo_${storedId}`) : null);
+        hasStoredClient = Boolean(storedId && storedSec);
+      } catch {
+        hasStoredClient = false;
+      }
+      if (hasStoredClient) {
+        handleClearClientToken();
+        window.location.hash = '#cliente';
+      } else {
+        window.location.hash = clientTokenParam ? `#cliente?token=${clientTokenParam}` : '#cliente';
+      }
+    }
     else if (view === 'porteria') window.location.hash = '#porteria';
     else if (view === 'admin') window.location.hash = '#admin';
     else if (view === 'guest') {
@@ -278,6 +313,7 @@ export default function App() {
             <ClientPortal
               initialToken={clientTokenParam}
               lang={lang}
+              onClearTokenParam={handleClearClientToken}
             />
           )}
 

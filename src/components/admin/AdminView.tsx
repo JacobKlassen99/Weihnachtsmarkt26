@@ -2495,7 +2495,45 @@ export const AdminView: React.FC<Props> = ({
 
       {/* 5. INVITADOS TAB */}
       {activeTab === 'invitados' && adminData && (() => {
-        const filteredGuests = (adminData.invitados || []).filter((inv) => {
+        // Ordenar numéricamente por número de stand de menor a mayor (#6, #7, #8... #40)
+        // y agrupar consecutivamente los invitados del mismo stand
+        const sortedGuests = (adminData.invitados || []).slice().sort((a, b) => {
+          const rawA = a.NumeroStand !== undefined ? a.NumeroStand : a.stand;
+          const rawB = b.NumeroStand !== undefined ? b.NumeroStand : b.stand;
+          const matchA = String(rawA ?? '').match(/\d+/);
+          const matchB = String(rawB ?? '').match(/\d+/);
+          const numA = matchA ? parseInt(matchA[0], 10) : (typeof rawA === 'number' && !isNaN(rawA) ? rawA : 999999);
+          const numB = matchB ? parseInt(matchB[0], 10) : (typeof rawB === 'number' && !isNaN(rawB) ? rawB : 999999);
+
+          if (numA !== numB) {
+            return numA - numB;
+          }
+
+          // Agrupar consecutivamente los invitados del mismo stand
+          const nameA = String(
+            a.NombreCompleto ||
+            (a as any).nombreCompleto ||
+            a.nombre_invitado ||
+            a.NombreInvitado ||
+            ''
+          ).trim().toLowerCase();
+          const nameB = String(
+            b.NombreCompleto ||
+            (b as any).nombreCompleto ||
+            b.nombre_invitado ||
+            b.NombreInvitado ||
+            ''
+          ).trim().toLowerCase();
+          if (nameA && nameB && nameA !== nameB) {
+            return nameA.localeCompare(nameB);
+          }
+
+          const idA = String(a.id || (a as any).InvitadoID || a.token_invitacion || '');
+          const idB = String(b.id || (b as any).InvitadoID || b.token_invitacion || '');
+          return idA.localeCompare(idB);
+        });
+
+        const filteredGuests = sortedGuests.filter((inv) => {
           const guestName = (
             inv.NombreCompleto ||
             (inv as any).nombreCompleto ||

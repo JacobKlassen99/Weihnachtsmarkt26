@@ -244,6 +244,12 @@ export const AdminView: React.FC<Props> = ({
     rol: 'ADMIN',
   });
 
+  // User Status Confirmation Modal
+  const [userStatusModalOpen, setUserStatusModalOpen] = useState(false);
+  const [selectedUserForStatus, setSelectedUserForStatus] = useState<Usuario | null>(null);
+  const [changingUserStatus, setChangingUserStatus] = useState(false);
+  const [userStatusModalError, setUserStatusModalError] = useState<string | null>(null);
+
   // Password Modal
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [targetUserToChangePass, setTargetUserToChangePass] = useState('');
@@ -356,6 +362,8 @@ export const AdminView: React.FC<Props> = ({
     showFeedback(expiredMsg, 'error');
     setStandModalOpen(false);
     setUserModalOpen(false);
+    setUserStatusModalOpen(false);
+    setSelectedUserForStatus(null);
     setPasswordModalOpen(false);
     setEditionModalOpen(false);
     onLogout();
@@ -905,18 +913,35 @@ export const AdminView: React.FC<Props> = ({
     }
   };
 
-  const handleToggleUserStatus = async (user: Usuario) => {
+  const openToggleUserStatusModal = (user: Usuario) => {
+    setUserStatusModalError(null);
+    setSelectedUserForStatus(user);
+    setUserStatusModalOpen(true);
+  };
+
+  const handleConfirmToggleUserStatus = async () => {
+    if (!selectedUserForStatus) return;
+
     const token = getActiveToken();
     if (!token) {
       handleSessionExpired();
       return;
     }
 
-    const userId = user.UsuarioID || user.id || (user as any).ID || user.usuario;
-    const isActivo = user.Activo === 'SI' || user.activo === 'SI' || user.estado === 'activo' || (user.activo as any) === true;
+    const userId =
+      selectedUserForStatus.UsuarioID ||
+      selectedUserForStatus.id ||
+      (selectedUserForStatus as any).ID ||
+      selectedUserForStatus.usuario;
+    const isActivo =
+      selectedUserForStatus.Activo === 'SI' ||
+      selectedUserForStatus.activo === 'SI' ||
+      selectedUserForStatus.estado === 'activo' ||
+      (selectedUserForStatus.activo as any) === true;
     const nextActivo: 'SI' | 'NO' = isActivo ? 'NO' : 'SI';
 
-    setActionInProgress(userId);
+    setChangingUserStatus(true);
+    setUserStatusModalError(null);
     try {
       const res = await backendService.cambiarEstadoUsuario(
         token,
@@ -928,24 +953,28 @@ export const AdminView: React.FC<Props> = ({
           handleSessionExpired(res.error);
           return;
         }
-        throw new Error(res.error || 'Error al cambiar estado de usuario en Google Sheets');
+        throw new Error(res.error || 'Error al cambiar estado de usuario');
       }
+
       showFeedback(
         lang === 'de'
-          ? `Benutzerstatus geändert auf ${nextActivo === 'SI' ? 'Aktiv' : 'Inaktiv'}`
-          : `Estado de usuario modificado a ${nextActivo === 'SI' ? 'Activo' : 'Inactivo'} en Google Sheets`,
+          ? `Benutzerstatus erfolgreich geändert auf ${nextActivo === 'SI' ? 'Aktiv' : 'Inaktiv'}`
+          : `Estado de usuario actualizado a ${nextActivo === 'SI' ? 'Activo' : 'Inactivo'}`,
         'success'
       );
+      setUserStatusModalOpen(false);
+      setSelectedUserForStatus(null);
       await loadAdminData(token, true);
     } catch (err: any) {
-      const msg = err.message || 'Error al cambiar estado';
+      const msg = err.message || (lang === 'de' ? 'Fehler beim Ändern des Status' : 'Error al cambiar estado');
       if (msg.includes('expirada') || msg.includes('Sesion') || msg.includes('no autorizada')) {
         handleSessionExpired(msg);
         return;
       }
+      setUserStatusModalError(msg);
       showFeedback(msg, 'error');
     } finally {
-      setActionInProgress(null);
+      setChangingUserStatus(false);
     }
   };
 
@@ -3169,16 +3198,11 @@ export const AdminView: React.FC<Props> = ({
                       <KeyRound className="w-4 h-4 text-gray-600" />
                     </button>
                     <button
-                      onClick={() => handleToggleUserStatus(u)}
-                      disabled={actionInProgress === userId}
-                      className="p-2 rounded-lg bg-white hover:bg-gray-100 disabled:opacity-50 text-gray-700 border border-gray-200 transition shadow-xs active:scale-95"
+                      onClick={() => openToggleUserStatusModal(u)}
+                      className="p-2 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs active:scale-95"
                       title={t.toggleStatus}
                     >
-                      {actionInProgress === userId ? (
-                        <RefreshCw className="w-4 h-4 animate-spin text-red-600" />
-                      ) : (
-                        <Sliders className="w-4 h-4 text-gray-600" />
-                      )}
+                      <Sliders className="w-4 h-4 text-gray-600" />
                     </button>
                   </div>
                 </div>
@@ -3239,16 +3263,11 @@ export const AdminView: React.FC<Props> = ({
                               <KeyRound className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleToggleUserStatus(u)}
-                              disabled={actionInProgress === (u.UsuarioID || u.id || u.usuario)}
-                              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 disabled:opacity-50 text-gray-700 border border-gray-200 transition shadow-xs"
+                              onClick={() => openToggleUserStatusModal(u)}
+                              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs"
                               title={t.toggleStatus}
                             >
-                              {actionInProgress === (u.UsuarioID || u.id || u.usuario) ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Sliders className="w-3.5 h-3.5" />
-                              )}
+                              <Sliders className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -3775,6 +3794,117 @@ export const AdminView: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL: Confirm User Status (Activate/Inactivate) */}
+      {userStatusModalOpen && selectedUserForStatus && (() => {
+        const isActivo = selectedUserForStatus.Activo === 'SI' ||
+          selectedUserForStatus.activo === 'SI' ||
+          selectedUserForStatus.estado === 'activo' ||
+          (selectedUserForStatus.activo as any) === true;
+        const fullName = (
+          selectedUserForStatus.Nombre ||
+          selectedUserForStatus.nombre ||
+          selectedUserForStatus.NombreCompleto ||
+          '-'
+        ).trim();
+        const username = selectedUserForStatus.Usuario || selectedUserForStatus.usuario;
+        const questionText = isActivo
+          ? (t.askDeactivateUser || (lang === 'de' ? 'Möchten Sie diesen Benutzer deaktivieren?' : '¿Deseas inactivar este usuario?'))
+          : (t.askActivateUser || (lang === 'de' ? 'Möchten Sie diesen Benutzer aktivieren?' : '¿Deseas activar este usuario?'));
+        const confirmBtnText = isActivo
+          ? (t.actionDeactivate || (lang === 'de' ? 'Deaktivieren' : 'Inactivar'))
+          : (t.actionActivate || (lang === 'de' ? 'Aktivieren' : 'Activar'));
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white border border-gray-200 p-6 text-gray-900 shadow-2xl">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-200">
+                <h3 className="text-base font-bold text-gray-900">
+                  {t.confirmStatusChange || (lang === 'de' ? 'Statusänderung bestätigen' : 'Confirmar cambio de estado')}
+                </h3>
+                <button
+                  onClick={() => {
+                    if (!changingUserStatus) {
+                      setUserStatusModalOpen(false);
+                      setSelectedUserForStatus(null);
+                      setUserStatusModalError(null);
+                    }
+                  }}
+                  disabled={changingUserStatus}
+                  className="text-gray-400 hover:text-gray-700 p-1 rounded-lg transition disabled:opacity-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {userStatusModalError && (
+                <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="font-bold block">
+                      {lang === 'de' ? 'Fehler beim Ändern des Status:' : 'Error al cambiar estado:'}
+                    </span>
+                    <span className="font-normal">{userStatusModalError}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 space-y-3">
+                {/* User Info Card */}
+                <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-sm text-gray-900 break-words">{fullName}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                        isActivo
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-gray-100 text-gray-600 border border-gray-200'
+                      }`}
+                    >
+                      {isActivo ? (lang === 'de' ? 'AKTIV' : 'ACTIVO') : (lang === 'de' ? 'INAKTIV' : 'INACTIVO')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 font-mono">@{username}</p>
+                </div>
+
+                {/* Question Prompt */}
+                <p className="text-xs font-semibold text-gray-800 text-center py-1">
+                  {questionText}
+                </p>
+
+                {/* Action Buttons */}
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserStatusModalOpen(false);
+                      setSelectedUserForStatus(null);
+                      setUserStatusModalError(null);
+                    }}
+                    disabled={changingUserStatus}
+                    className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition"
+                  >
+                    {t.cancel || (lang === 'de' ? 'Abbrechen' : 'Cancelar')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmToggleUserStatus}
+                    disabled={changingUserStatus}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-xs font-bold shadow-xs transition disabled:opacity-50 ${
+                      isActivo
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-green-700 hover:bg-green-800'
+                    }`}
+                  >
+                    {changingUserStatus && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{confirmBtnText}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* MODAL: Change Password */}
       {passwordModalOpen && (

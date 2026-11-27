@@ -294,6 +294,11 @@ export const translations = {
     changePassword: 'Cambiar Contraseña',
     newPassword: 'Nueva Contraseña',
     toggleStatus: 'Cambiar Estado',
+    confirmStatusChange: 'Confirmar cambio de estado',
+    askDeactivateUser: '¿Deseas inactivar este usuario?',
+    askActivateUser: '¿Deseas activar este usuario?',
+    actionActivate: 'Activar',
+    actionDeactivate: 'Inactivar',
 
     // Gestiones Admin
     editionsTitle: 'Gestiones Anuales del Evento',
@@ -617,6 +622,11 @@ export const translations = {
     changePassword: 'Passwort ändern',
     newPassword: 'Neues Passwort',
     toggleStatus: 'Status ändern',
+    confirmStatusChange: 'Statusänderung bestätigen',
+    askDeactivateUser: 'Möchten Sie diesen Benutzer deaktivieren?',
+    askActivateUser: 'Möchten Sie diesen Benutzer aktivieren?',
+    actionActivate: 'Aktivieren',
+    actionDeactivate: 'Deaktivieren',
 
     // Gestiones Admin
     editionsTitle: 'Jährliche Marktausgaben',
